@@ -14,6 +14,7 @@ src/
     ├── catalog/              products, categories and the pricing engine
     ├── customers/            accounts, tiers and deal history
     ├── quotations/           quote building, recalculation and blended risk
+    ├── recommendations/      upsell / cross-sell panel and its event log
     └── dashboard/            role-scoped summary counters
 ```
 
@@ -59,6 +60,9 @@ with the right status. Unknown errors are logged and become a generic 500
 | `DELETE` | `/api/quotations/:id/lines/:lineId` | Rep+ | – |
 | `POST` | `/api/quotations/:id/discount` | Rep+ | `{ discountPercent }` |
 | `POST` | `/api/quotations/:id/send` | Rep+ | `{ reason? }` |
+| `GET` | `/api/quotations/:id/recommendations` | Bearer | – |
+| `POST` | `/api/quotations/:id/recommendations/:productId/accept` | Rep+ | `{ quantity?, discountPercent? }` |
+| `POST` | `/api/quotations/:id/recommendations/:productId/dismiss` | Rep+ | – |
 
 Signup and login return `{ token, user: { id, email, firstName, lastName, roles } }`.
 Emails are normalized (trimmed + lowercased) and passwords must be at least 8
@@ -144,6 +148,27 @@ approval by hand. Drafts are exempt.
 Changes to a quote that has already been sent create a `QuoteRevision` snapshot
 and bump `versionNumber`; draft edits do not, or history would be one entry per
 keystroke.
+
+## Upsell / cross-sell
+
+`recommendations.service.ts`. Candidates come from `ProductRelationship` rows
+whose source is in the cart and whose target is not. Each candidate is priced
+through the catalog engine for **this** customer and then run through the risk
+engine with the candidate appended, so the panel reports what actually happens
+to order margin and to the approval requirement — not an estimate. The preview
+and the real recalculation therefore always agree.
+
+- A product reachable from several cart lines keeps its strongest pairing and
+  remembers every line that pointed at it (`becauseOf`).
+- `minimumMarginPercent` on the pairing is a floor on the **priced** margin, so
+  a suggestion that is healthy for one tier is suppressed for another whose
+  price list has already eroded it. Seeded at 15%.
+- A live `Promotion` adds a fixed rank boost, which is what "promoted products
+  rank higher" means in practice.
+- A dismissal sticks for the life of the quotation.
+
+Every suggestion shown, accepted or dismissed is written to
+`RecommendationEvent`, so the accept rate is measurable in the analytics module.
 
 ## Conventions
 

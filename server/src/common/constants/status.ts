@@ -82,6 +82,16 @@ export const RELATIONSHIP_TYPE = {
 export type RelationshipType =
   (typeof RELATIONSHIP_TYPE)[keyof typeof RELATIONSHIP_TYPE];
 
+export const RECOMMENDATION_ACTION = {
+  /** Logged the first time a suggestion is put in front of the rep. */
+  SHOWN: "SHOWN",
+  ACCEPTED: "ACCEPTED",
+  DISMISSED: "DISMISSED",
+} as const;
+
+export type RecommendationAction =
+  (typeof RECOMMENDATION_ACTION)[keyof typeof RECOMMENDATION_ACTION];
+
 export const LINE_TYPE = {
   ONE_TIME: "ONE_TIME",
   RECURRING: "RECURRING",

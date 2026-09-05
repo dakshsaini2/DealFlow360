@@ -210,3 +210,70 @@ export function riskBand(score: number) {
 export function humanStatus(value: string) {
   return value.replace(/_/g, ' ').toLowerCase();
 }
+
+/* ── Upsell / cross-sell ────────────────────────────── */
+
+export type Suggestion = {
+  productId: string;
+  sku: string;
+  name: string;
+  categoryName: string;
+  suggestionType: string;
+  rank: number;
+  score: number | null;
+  becauseOf: string[];
+  unitPrice: number;
+  listPrice: number;
+  revenueDelta: number;
+  marginDelta: number | null;
+  marginPercent: number | null;
+  orderMarginPercentAfter: number | null;
+  orderMarginDeltaPercent: number | null;
+  riskScoreAfter: number;
+  riskScoreDelta: number;
+  promotion: { id: string; name: string; discountValue: number } | null;
+  minimumMarginPercent: number | null;
+};
+
+export type SuggestionsResponse = {
+  suggestions: Suggestion[];
+  baseline: { riskScore: number; marginPercent: number | null };
+};
+
+export async function fetchSuggestions(id: string, signal?: AbortSignal) {
+  const { data } = await api.get<SuggestionsResponse>(
+    `/quotations/${id}/recommendations`,
+    { signal },
+  );
+
+  return data;
+}
+
+export async function acceptSuggestion(
+  id: string,
+  productId: string,
+  quantity = 1,
+) {
+  const { data } = await api.post<QuotationResponse>(
+    `/quotations/${id}/recommendations/${productId}/accept`,
+    { quantity },
+  );
+
+  return data;
+}
+
+export async function dismissSuggestion(id: string, productId: string) {
+  const { data } = await api.post<SuggestionsResponse>(
+    `/quotations/${id}/recommendations/${productId}/dismiss`,
+    {},
+  );
+
+  return data;
+}
+
+export const SUGGESTION_LABELS: Record<string, string> = {
+  UPSELL: 'Upsell',
+  CROSS_SELL: 'Cross-sell',
+  ACCESSORY: 'Accessory',
+  SUBSTITUTE: 'Alternative',
+};

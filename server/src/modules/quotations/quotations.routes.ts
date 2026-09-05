@@ -3,11 +3,14 @@ import {
   requireAuth,
   requireRole,
 } from "../../common/middleware/auth.middleware.js";
+import { recommendationsRouter } from "../recommendations/recommendations.routes.js";
 import * as controller from "./quotations.controller.js";
 
 export const quotationsRouter = Router();
 
 quotationsRouter.use(requireAuth);
+
+quotationsRouter.use("/:id/recommendations", recommendationsRouter);
 
 quotationsRouter.get("/", controller.list);
 quotationsRouter.get("/:id", controller.detail);

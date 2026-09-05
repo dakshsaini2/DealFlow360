@@ -27,6 +27,7 @@ import {
   type QuoteLine,
 } from '../../../util/quotations';
 import AddLineModal from './AddLineModal';
+import RecommendationsPanel from './RecommendationsPanel';
 import RiskPanel from './RiskPanel';
 
 export default function QuotationBuilder() {
@@ -36,6 +37,9 @@ export default function QuotationBuilder() {
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [orderDiscount, setOrderDiscount] = useState('');
+  // Any cart change re-ranks the suggestions, since what is already in the
+  // cart both seeds and filters them.
+  const [cartVersion, setCartVersion] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -59,6 +63,7 @@ export default function QuotationBuilder() {
 
     try {
       setData(await action());
+      setCartVersion((current) => current + 1);
     } catch (err) {
       setError(getApiErrorMessage(err, 'That change could not be saved.'));
     } finally {
@@ -214,6 +219,16 @@ export default function QuotationBuilder() {
         <div className="flex flex-col gap-6">
           <RiskPanel risk={risk} approvalRequired={quotation.approvalRequired} />
 
+          <RecommendationsPanel
+            quotationId={id}
+            editable={editable}
+            refreshKey={cartVersion}
+            onAccepted={(result) => {
+              setData(result);
+              setCartVersion((current) => current + 1);
+            }}
+          />
+
           <Card>
             <h2 className="border-b border-slate-100 px-5 py-4 text-[15px] font-semibold text-slate-900">
               Customer
@@ -245,6 +260,7 @@ export default function QuotationBuilder() {
           onClose={() => setPicking(false)}
           onPick={async (product, quantity) => {
             setData(await addQuoteLine(id, { productId: product.id, quantity }));
+            setCartVersion((current) => current + 1);
           }}
         />
       )}

@@ -489,6 +489,12 @@ async function main() {
     { from: "CL-K8S-MGD", to: "CL-DR-SITE", type: RELATIONSHIP_TYPE.CROSS_SELL, score: 0.7 },
   ];
 
+  // "Only healthy margin suggestions surface" (spec A6): a pairing whose
+  // priced margin for this customer falls under the floor is not shown at all.
+  // 15% sits just above the thinnest hardware margins on the Enterprise price
+  // list, so weak upsells drop out for that tier while healthy ones remain.
+  const SUGGESTION_MARGIN_FLOOR = 15;
+
   for (const rel of relationships) {
     const sourceProductId = productBySku.get(rel.from)!;
     const targetProductId = productBySku.get(rel.to)!;
@@ -501,12 +507,13 @@ async function main() {
           relationshipType: rel.type,
         },
       },
-      update: { score: rel.score },
+      update: { score: rel.score, minimumMarginPercent: SUGGESTION_MARGIN_FLOOR },
       create: {
         sourceProductId,
         targetProductId,
         relationshipType: rel.type,
         score: rel.score,
+        minimumMarginPercent: SUGGESTION_MARGIN_FLOOR,
       },
     });
   }
