@@ -3,7 +3,6 @@ import { ForbiddenError, MissingTokenError } from "../errors/AuthError.js";
 import type { UserRole } from "../types/auth.types.js";
 import { extractBearerToken, verifyToken } from "../utils/auth.js";
 
-/** Rejects the request unless it carries a valid bearer token. */
 export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   const token = extractBearerToken(req.headers.authorization);
 
@@ -19,7 +18,6 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   }
 }
 
-/** Rejects the request unless the authenticated user has one of `roles`. */
 export function requireRole(...roles: UserRole[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {

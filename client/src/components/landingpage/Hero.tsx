@@ -1,4 +1,4 @@
-import { ArrowRight, Play, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 
 export default function Hero() {
   return (
@@ -55,18 +55,11 @@ export default function Hero() {
           id="hero-actions"
         >
           <a
-            href="#pricing"
+            href="/signup"
             className="inline-flex items-center gap-2.5 px-8 py-4 bg-slate-900 text-white text-[16px] font-semibold rounded-full no-underline hover:bg-slate-800 transition-all duration-300 hover:-translate-y-0.5 shadow-lg hover:shadow-xl"
           >
-            Start Free Trial
+            Get Started
             <ArrowRight size={18} />
-          </a>
-          <a
-            href="#how-it-works"
-            className="inline-flex items-center gap-2.5 px-8 py-4 bg-transparent text-slate-700 text-[16px] font-semibold rounded-full no-underline border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all duration-300 hover:-translate-y-0.5"
-          >
-            <Play size={18} className="text-slate-400" />
-            Watch Demo
           </a>
         </div>
 
@@ -93,8 +86,8 @@ export default function Hero() {
             ))}
           </div>
           <div className="flex flex-col text-left">
-            <span className="text-[14px] font-bold text-slate-800">2,400+</span>
-            <span className="text-[12px] text-slate-400">teams already closing deals faster</span>
+            <span className="text-[14px] font-bold text-slate-800">Businesses</span>
+            <span className="text-[12px] text-slate-400">already closing deals faster</span>
           </div>
         </div>
 

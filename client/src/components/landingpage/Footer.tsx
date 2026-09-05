@@ -8,10 +8,9 @@ import {
 } from 'lucide-react';
 
 const footerLinks = {
-  Product: ['Features', 'Pricing', 'Integrations', 'Changelog', 'Roadmap'],
-  Company: ['About', 'Blog', 'Careers', 'Press', 'Partners'],
-  Resources: ['Documentation', 'API Reference', 'Guides', 'Community', 'Status'],
-  Legal: ['Privacy Policy', 'Terms of Service', 'Security', 'GDPR', 'Cookies'],
+  Product: ['Features'],
+  Company: ['About'],
+  // Legal: ['Privacy Policy', 'Terms of Service', 'Security', 'GDPR', 'Cookies'],
 };
 
 export default function Footer() {

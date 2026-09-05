@@ -23,7 +23,6 @@ export function signToken(payload: JwtPayload): string {
   } as jwt.SignOptions);
 }
 
-/** Verifies a token and returns its claims, or throws `InvalidTokenError`. */
 export function verifyToken(token: string): JwtPayload {
   let decoded: unknown;
 
@@ -40,7 +39,6 @@ export function verifyToken(token: string): JwtPayload {
   return decoded;
 }
 
-/** Pulls the raw token out of an `Authorization: Bearer <token>` header. */
 export function extractBearerToken(header: string | undefined): string | null {
   if (!header?.startsWith(BEARER_PREFIX)) {
     return null;

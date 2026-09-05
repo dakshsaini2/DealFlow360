@@ -1,12 +1,11 @@
 import type { NextFunction, Request, Response } from "express";
 import { MissingTokenError } from "../../common/errors/AuthError.js";
 import * as authService from "./auth.service.js";
-import { parseCredentials } from "./auth.types.js";
+import { parseCredentials, parseSignup } from "./auth.types.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
   try {
-    const credentials = parseCredentials(req.body);
-    res.status(201).json(await authService.signup(credentials));
+    res.status(201).json(await authService.signup(parseSignup(req.body)));
   } catch (err) {
     next(err);
   }

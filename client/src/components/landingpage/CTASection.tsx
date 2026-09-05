@@ -28,24 +28,19 @@ export default function CTASection() {
               <span className="font-[var(--font-serif)] italic font-semibold text-slate-600">deal pipeline?</span>
             </h2>
 
-            <p className="text-[17px] leading-relaxed text-slate-500 max-w-[520px] mb-9">
-              Join 2,400+ investment teams already closing deals faster with DealFlow360.
-              Start your free 14-day trial today — no credit card required.
-            </p>
-
             <div className="flex items-center gap-4 flex-wrap justify-center">
               <a
-                href="#pricing"
+                href="/signup"
                 className="inline-flex items-center gap-2.5 px-8 py-4 bg-slate-900 text-white text-[16px] font-semibold rounded-full no-underline hover:bg-slate-800 transition-all duration-300 hover:-translate-y-0.5 shadow-lg hover:shadow-xl"
               >
-                Start Free Trial
+                Signup
                 <ArrowRight size={18} />
               </a>
               <a
-                href="#"
+                href="/login"
                 className="inline-flex items-center gap-2.5 px-8 py-4 bg-white text-slate-700 text-[16px] font-semibold rounded-full no-underline border border-slate-200 hover:border-slate-300 hover:bg-white transition-all duration-300 hover:-translate-y-0.5 shadow-sm"
               >
-                Schedule a Demo
+                Login
               </a>
             </div>
           </div>

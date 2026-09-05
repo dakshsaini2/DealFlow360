@@ -2,15 +2,10 @@ import type { NextFunction, Request, Response } from "express";
 import { AppError, NotFoundError } from "../errors/AppError.js";
 import { isProduction } from "../utils/env.js";
 
-/** Terminal 404 handler for requests that matched no route. */
 export function notFoundHandler(req: Request, _res: Response, next: NextFunction) {
   next(new NotFoundError(`Route ${req.method} ${req.originalUrl} not found`));
 }
 
-/**
- * Single place where errors become HTTP responses. Known `AppError`s keep their
- * status and code; anything else is logged and reported as a generic 500.
- */
 export function errorHandler(
   err: unknown,
   _req: Request,

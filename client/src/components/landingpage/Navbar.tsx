@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Menu, X, ArrowRight, Zap } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const navLinks = [
   { label: 'Features', href: '#features' },
   { label: 'How It Works', href: '#how-it-works' },
-  { label: 'Metrics', href: '#metrics' },
-  { label: 'Testimonials', href: '#testimonials' },
-  { label: 'Pricing', href: '#pricing' },
 ];
 
 export default function Navbar() {
@@ -30,14 +28,14 @@ export default function Navbar() {
     >
       <div className="max-w-[1200px] mx-auto px-6 flex items-center justify-between">
         {/* Logo */}
-        <a href="#" className="flex items-center gap-2.5 no-underline" id="nav-logo">
+        <Link to="/" className="flex items-center gap-2.5 no-underline" id="nav-logo">
           <div className="w-9 h-9 rounded-lg bg-slate-900 flex items-center justify-center text-white">
             <Zap size={18} />
           </div>
           <span className="font-[var(--font-display)] font-bold text-xl tracking-tight text-slate-900">
             Deal<span className="text-brand-600">Flow</span>360
           </span>
-        </a>
+        </Link>
 
         {/* Desktop Links */}
         <div className="hidden md:flex items-center gap-1" id="nav-links-desktop">
@@ -54,16 +52,16 @@ export default function Navbar() {
 
         {/* Desktop CTA */}
         <div className="hidden md:flex items-center gap-4">
-          <a href="#pricing" className="text-slate-500 text-[14px] font-medium no-underline hover:text-slate-900 transition-colors" id="nav-signin">
+          <Link to="/login" className="text-slate-500 text-[14px] font-medium no-underline hover:text-slate-900 transition-colors" id="nav-signin">
             Sign In
-          </a>
-          <a
-            href="#pricing"
+          </Link>
+          <Link
+            to="/signup"
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-[14px] font-semibold rounded-full no-underline hover:bg-slate-800 transition-all duration-300 hover:-translate-y-0.5 shadow-md hover:shadow-lg"
             id="nav-cta"
           >
             Get Started <ArrowRight size={15} />
-          </a>
+          </Link>
         </div>
 
         {/* Mobile Toggle */}
@@ -94,13 +92,21 @@ export default function Navbar() {
             {link.label}
           </a>
         ))}
-        <div className="mt-6 w-[200px]">
-          <a
-            href="#pricing"
+        <div className="mt-6 w-[200px] flex flex-col items-center gap-3">
+          <Link
+            to="/signup"
             className="flex items-center justify-center gap-2 w-full px-6 py-3 bg-slate-900 text-white font-semibold rounded-full no-underline"
+            onClick={() => setMenuOpen(false)}
           >
             Get Started <ArrowRight size={16} />
-          </a>
+          </Link>
+          <Link
+            to="/login"
+            className="text-slate-500 text-[15px] font-medium no-underline hover:text-slate-900 transition-colors"
+            onClick={() => setMenuOpen(false)}
+          >
+            Sign In
+          </Link>
         </div>
       </div>
     </nav>

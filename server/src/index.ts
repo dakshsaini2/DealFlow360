@@ -6,8 +6,16 @@ import {
 import { env } from "./common/utils/env.js";
 import { disconnectPrisma } from "./common/utils/prisma.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import cors from "cors";
 
 const app = express();
+
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  }),
+);
 
 app.use(express.json());
 
