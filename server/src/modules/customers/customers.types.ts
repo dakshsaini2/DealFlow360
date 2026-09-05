@@ -40,3 +40,23 @@ export type IdParam = z.infer<typeof idParamSchema>;
 export type ListCustomersQuery = z.infer<typeof listCustomersSchema>;
 export type CreateCustomerInput = z.infer<typeof createCustomerSchema>;
 export type UpdateCustomerInput = z.infer<typeof updateCustomerSchema>;
+
+/* ── portal invitations ───────────────────────────── */
+
+export const inviteParamsSchema = z.object({
+  id: z.uuid("must be a valid id"),
+  inviteId: z.uuid("must be a valid id"),
+});
+
+export const accessParamsSchema = z.object({
+  id: z.uuid("must be a valid id"),
+  userId: z.uuid("must be a valid id"),
+});
+
+export const createInviteSchema = z.object({
+  email: z.string().trim().toLowerCase().email("must be a valid email"),
+  firstName: z.string().trim().min(1).max(60),
+  lastName: z.string().trim().min(1).max(60),
+});
+
+export type CreateInviteInput = z.infer<typeof createInviteSchema>;

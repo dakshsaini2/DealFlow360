@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check } from 'lucide-react';
 import { Badge, Card, ErrorBanner, SelectField, TextField } from '../../../components/ui';
+import axios from 'axios';
 import { getApiErrorMessage } from '../../../util/api';
 import { fetchCustomers, type CustomerSummary } from '../../../util/customers';
 import {
@@ -35,7 +36,14 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
         setCustomers(result.data);
         setCustomerId((current) => current || result.data[0]?.id || '');
       })
-      .catch(() => setError('Could not load customers.'));
+      .catch((err) => {
+        // StrictMode mounts an effect twice in development, so the first
+        // request is aborted by its own cleanup. That rejection is not a
+        // failure worth showing — the second request is already in flight.
+        if (axios.isCancel(err)) return;
+
+        setError(getApiErrorMessage(err, 'Could not load customers.'));
+      });
 
     return () => controller.abort();
   }, []);

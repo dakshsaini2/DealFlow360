@@ -10,6 +10,7 @@ import {
   PageHeader,
   Spinner,
 } from '../../../components/ui';
+import axios from 'axios';
 import { getApiErrorMessage } from '../../../util/api';
 import {
   fetchCustomer,
@@ -21,6 +22,7 @@ import {
   type CustomerTier,
 } from '../../../util/customers';
 import { useAuth } from '../../../hooks/useAuth';
+import PortalAccessPanel from './PortalAccessPanel';
 import CustomerFormModal from './CustomerFormModal';
 
 const currency = new Intl.NumberFormat('en-US', {
@@ -34,6 +36,7 @@ export default function CustomerDetailPage() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   const canArchive = hasRole('ADMIN', 'SALES_MANAGER');
+  const canInvite = hasRole('ADMIN', 'SALES_MANAGER', 'SALES_REP');
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<CustomerHistory | null>(null);
@@ -52,7 +55,12 @@ export default function CustomerDetailPage() {
           setHistory(result.history);
           setError('');
         })
-        .catch((err) => setError(getApiErrorMessage(err, 'Could not load this customer.')));
+        .catch((err) => {
+          // An aborted request is this effect's own cleanup, not a failure.
+          if (axios.isCancel(err)) return;
+
+          setError(getApiErrorMessage(err, 'Could not load this customer.'));
+        });
     },
     [id],
   );
@@ -117,9 +125,7 @@ export default function CustomerDetailPage() {
                 {customer.isActive ? 'Archive' : 'Restore'}
               </Button>
             )}
-            <Button onClick={() => navigate('/app/quotations')} disabled title="Arrives in module 3">
-              New quotation
-            </Button>
+            <Button onClick={() => navigate('/app/quotations')}>New quotation</Button>
           </div>
         }
       />
@@ -165,6 +171,13 @@ export default function CustomerDetailPage() {
           </dl>
         </Card>
 
+        {/* Portal logins are issued from here — a customer cannot self-register. */}
+        {canInvite && (
+          <div className="lg:col-span-2">
+            <PortalAccessPanel customerId={customer.id} />
+          </div>
+        )}
+
         <Card className="lg:col-span-2">
           <h2 className="border-b border-slate-100 px-5 py-4 text-[15px] font-semibold text-slate-900">
             Deal history
@@ -173,7 +186,7 @@ export default function CustomerDetailPage() {
           {history.recentQuotations.length === 0 && history.recentOrders.length === 0 ? (
             <EmptyState
               title="No deals yet"
-              description="Quotations and orders for this account will appear here once the quote builder lands in module 3."
+              description="Quotations and orders for this account will appear here as they are raised."
             />
           ) : (
             <ul className="divide-y divide-slate-100">

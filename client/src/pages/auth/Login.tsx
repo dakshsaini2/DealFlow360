@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lock, Mail } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, PasswordField, SubmitButton } from '../../components/auth/AuthForm';
-import { getApiErrorMessage } from '../../util/api';
+import { getApiErrorMessage, homeForUser } from '../../util/api';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Login() {
@@ -26,9 +26,7 @@ export default function Login() {
 
       // A portal user has no internal workspace to land on, so the default
       // destination follows the role rather than being hard-coded to /app.
-      const home = user.roles.includes('CUSTOMER') && user.roles.length === 1 ? '/portal' : '/app';
-
-      navigate(from ?? home, { replace: true });
+      navigate(from ?? homeForUser(user), { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not sign you in. Please try again.'));
     } finally {

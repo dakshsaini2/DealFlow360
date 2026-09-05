@@ -279,7 +279,14 @@ function NewQuotationModal({ onClose }: { onClose: () => void }) {
         setCustomers(result.data);
         setCustomerId((current) => current || result.data[0]?.id || '');
       })
-      .catch(() => setError('Could not load customers.'));
+      .catch((err) => {
+        // StrictMode mounts an effect twice in development, so the first
+        // request is aborted by its own cleanup. That rejection is not a
+        // failure worth showing — the second request is already in flight.
+        if (axios.isCancel(err)) return;
+
+        setError(getApiErrorMessage(err, 'Could not load customers.'));
+      });
 
     return () => controller.abort();
   }, []);

@@ -38,6 +38,8 @@ model User {
   quoteRevisions   QuoteRevision[]
   approvalActions  ApprovalAction[] @relation("Approver")
   customerUsers    CustomerUser[]
+  invitesSent      PortalInvite[]   @relation("InvitedBy")
+  inviteAccepted   PortalInvite[]   @relation("InviteAcceptedBy")
   changeRequests   ChangeRequest[]  @relation("RequestedBy")
   resolvedRequests ChangeRequest[]  @relation("ResolvedBy")
   lineComments     LineComment[]
@@ -131,6 +133,7 @@ model Customer {
   createdBy    User?         @relation("CustomerCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   users         CustomerUser[]
+  portalInvites PortalInvite[]
   quotations    Quotation[]
   subscriptions Subscription[]
   orders        Order[]
@@ -145,6 +148,46 @@ model Customer {
 // ============================================================
 // 7. CUSTOMER_USERS
 // ============================================================
+
+/**
+ * A pending invitation to the customer portal.
+ * Portal access is granted by the seller, never claimed by the buyer: a
+ * customer's quotations are commercially sensitive, so being able to sign up
+ * with an address must not be enough to read them. This row is what turns a
+ * rep's invitation into a `CustomerUser` link once the recipient sets a
+ * password.
+ */
+model PortalInvite {
+  id         String @id @default(uuid()) @db.Uuid
+  customerId String @db.Uuid
+
+  email     String
+  firstName String
+  lastName  String
+
+  /**
+   * SHA-256 of the invite token. The plaintext exists only in the URL handed
+   * to the rep, so a leaked database cannot be used to accept invitations.
+   */
+  tokenHash String @unique
+
+  invitedByUserId String  @db.Uuid
+  acceptedUserId  String? @db.Uuid
+
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  invitedBy    User     @relation("InvitedBy", fields: [invitedByUserId], references: [id], onDelete: Restrict)
+  acceptedUser User?    @relation("InviteAcceptedBy", fields: [acceptedUserId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([email])
+  @@index([invitedByUserId])
+  @@index([acceptedUserId])
+}
 
 model CustomerUser {
   id         String   @id @default(uuid()) @db.Uuid

@@ -27,8 +27,13 @@ export const signupSchema = z.object({
   password,
   firstName: name,
   lastName: name,
-  /** Self-signup may only ask for a rep or customer seat. */
-  role: z.enum(["SALES_REP", "CUSTOMER"]).optional(),
+  /**
+   * Self-signup creates internal sales staff only. A portal customer cannot
+   * sign themselves up: their account is created by accepting an invitation
+   * from the rep who owns the relationship, because being able to type a
+   * company's email address must not be enough to read that company's deals.
+   */
+  role: z.enum(["SALES_REP"]).optional(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -49,3 +54,15 @@ export type AuthResult = {
 };
 
 export const ASSIGNABLE_ROLES = USER_ROLES;
+
+/* ── portal invitations ───────────────────────────── */
+
+export const inviteTokenParamSchema = z.object({
+  token: z.string().trim().min(20).max(200),
+});
+
+export const acceptInviteSchema = z.object({
+  password,
+});
+
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;

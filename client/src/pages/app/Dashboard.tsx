@@ -104,7 +104,7 @@ export default function Dashboard() {
 
         {summary.recentQuotations.length === 0 ? (
           <p className="px-5 py-10 text-center text-[14px] text-slate-400">
-            No quotations yet — the quote builder arrives in module 3.
+            No quotations yet — start one from the Quotations screen.
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">

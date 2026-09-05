@@ -16,6 +16,19 @@ export type PublicUser = {
   roles: UserRole[];
 };
 
+/**
+ * Where a signed-in user belongs. A portal customer has no internal workspace,
+ * so every redirect — login, signup, an already-authenticated visit to a public
+ * page — resolves through here rather than hard-coding `/app`.
+ */
+export function homeForUser(user: PublicUser | null): string {
+  if (!user) return '/login';
+
+  const internal: UserRole[] = ['ADMIN', 'SALES_MANAGER', 'FINANCE', 'SALES_REP'];
+
+  return user.roles.some((role) => internal.includes(role)) ? '/app' : '/portal';
+}
+
 /** Mirrors the server's `requireRole`: true when the user holds any of them. */
 export function hasAnyRole(user: PublicUser | null, roles: readonly UserRole[]): boolean {
   return user ? user.roles.some((role) => roles.includes(role)) : false;
