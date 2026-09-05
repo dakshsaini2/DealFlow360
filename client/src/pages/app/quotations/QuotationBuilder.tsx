@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Send, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, CheckCircle2, Plus, Repeat, Send, Trash2 } from 'lucide-react';
 import {
   Badge,
   Button,
   Card,
   EmptyState,
   ErrorBanner,
+  Modal,
   PageHeader,
   Spinner,
+  TextField,
 } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
 import { currency, marginTone } from '../../../util/catalog';
@@ -26,13 +28,18 @@ import {
   type QuotationResponse,
   type QuoteLine,
 } from '../../../util/quotations';
+import { confirmQuotation } from '../../../util/orders';
 import AddLineModal from './AddLineModal';
+import ApprovalPanel from './ApprovalPanel';
+import NegotiationPanel from './NegotiationPanel';
 import RecommendationsPanel from './RecommendationsPanel';
 import RiskPanel from './RiskPanel';
 
 export default function QuotationBuilder() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<QuotationResponse | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -87,6 +94,15 @@ export default function QuotationBuilder() {
   const { quotation, risk } = data;
   const editable = ['DRAFT', 'SENT', 'UNDER_NEGOTIATION'].includes(quotation.status);
 
+  // Confirmation is the quote-to-order handover. The server enforces this same
+  // rule; mirroring it here just keeps the button from offering a dead click.
+  const awaitingApproval = quotation.approvalStatus === 'PENDING';
+  const approvalBlocked = ['PENDING', 'REJECTED', 'RETURNED'].includes(quotation.approvalStatus);
+  const confirmable =
+    ['SENT', 'UNDER_NEGOTIATION'].includes(quotation.status) &&
+    !approvalBlocked &&
+    quotation.lines.length > 0;
+
   return (
     <div className="flex flex-col gap-6">
       <BackLink />
@@ -111,6 +127,21 @@ export default function QuotationBuilder() {
                 <Send size={15} />
                 Send to customer
               </Button>
+            )}
+            {confirmable && (
+              <Button onClick={() => setConfirming(true)} loading={busy}>
+                <CheckCircle2 size={15} />
+                Confirm order
+              </Button>
+            )}
+            {awaitingApproval && (
+              <span
+                title="Approval has to clear before this quote can become an order"
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-[14px] font-semibold text-slate-400"
+              >
+                <CheckCircle2 size={15} />
+                Awaiting approval
+              </span>
             )}
           </div>
         }
@@ -175,6 +206,7 @@ export default function QuotationBuilder() {
                   <thead>
                     <tr className="border-b border-slate-100 text-[11px] uppercase tracking-wide text-slate-400">
                       <th className="px-5 py-3 font-semibold">Product</th>
+                      <th className="px-3 py-3 font-semibold">Billing</th>
                       <th className="px-3 py-3 text-center font-semibold">Qty</th>
                       <th className="px-3 py-3 text-right font-semibold">Unit</th>
                       <th className="px-3 py-3 text-center font-semibold">Disc %</th>
@@ -218,6 +250,27 @@ export default function QuotationBuilder() {
 
         <div className="flex flex-col gap-6">
           <RiskPanel risk={risk} approvalRequired={quotation.approvalRequired} />
+
+          <ApprovalPanel
+            quotationId={id}
+            refreshKey={cartVersion}
+            onDecided={() => {
+              // A decision changes the quotation's approval status, so pull
+              // the whole record again rather than patching it locally.
+              fetchQuotation(id).then(setData).catch(() => undefined);
+            }}
+          />
+
+          {/* Renders nothing on a draft, which has no thread yet. */}
+          <NegotiationPanel
+            quotationId={id}
+            refreshKey={cartVersion}
+            onQuotationChanged={() => {
+              // Accepting a concession reprices the quote and can re-open
+              // approval, so pull the whole record again.
+              fetchQuotation(id).then(setData).catch(() => undefined);
+            }}
+          />
 
           <RecommendationsPanel
             quotationId={id}
@@ -264,7 +317,82 @@ export default function QuotationBuilder() {
           }}
         />
       )}
+
+      {confirming && (
+        <ConfirmOrderDialog
+          quoteNumber={quotation.quoteNumber}
+          total={quotation.grandTotal}
+          onClose={() => setConfirming(false)}
+          onConfirm={async (promisedDeliveryDate) => {
+            setBusy(true);
+            setError('');
+
+            try {
+              const result = await confirmQuotation(id, { promisedDeliveryDate });
+              navigate(`/app/orders/${result.order.id}`);
+            } catch (err) {
+              setError(getApiErrorMessage(err, 'This quotation could not be confirmed.'));
+              setConfirming(false);
+              setBusy(false);
+            }
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Capturing the promised delivery date here is what later lets the deal-health
+ * dashboard measure slippage — there is no other point in the flow where the
+ * commitment is made explicit.
+ */
+function ConfirmOrderDialog({
+  quoteNumber,
+  total,
+  onClose,
+  onConfirm,
+}: {
+  quoteNumber: string;
+  total: number;
+  onClose: () => void;
+  onConfirm: (promisedDeliveryDate?: string) => void;
+}) {
+  const [date, setDate] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <Modal title={`Confirm ${quoteNumber}`} onClose={onClose}>
+      <div className="flex flex-col gap-4 p-5">
+        <p className="text-[13px] leading-relaxed text-slate-500">
+          This creates a sales order for {currency.format(total)} and closes the quotation. One-time
+          and recurring lines are split onto their own billing tracks.
+        </p>
+        <TextField
+          id="promised-date"
+          label="Promised delivery date"
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          hint="Optional. Delivery slippage is measured against this date."
+        />
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={busy}>
+            Not yet
+          </Button>
+          <Button
+            loading={busy}
+            onClick={() => {
+              setBusy(true);
+              onConfirm(date ? new Date(date).toISOString() : undefined);
+            }}
+          >
+            <CheckCircle2 size={15} />
+            Create order
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -278,7 +406,11 @@ function LineRow({
   line: QuoteLine;
   editable: boolean;
   busy: boolean;
-  onChange: (input: { quantity?: number; discountPercent?: number }) => void;
+  onChange: (input: {
+    quantity?: number;
+    discountPercent?: number;
+    subscriptionPlanId?: string | null;
+  }) => void;
   onRemove: () => void;
 }) {
   // Local copies so typing stays responsive; the server is called on blur.
@@ -299,6 +431,9 @@ function LineRow({
         <p className="text-[12px] text-slate-400">
           {line.product.sku} · {line.product.category.name}
         </p>
+      </td>
+      <td className="px-3 py-3">
+        <BillingCell line={line} editable={editable} busy={busy} onChange={onChange} />
       </td>
       <td className="px-3 py-3 text-center">
         {editable ? (
@@ -382,6 +517,62 @@ function LineRow({
         </td>
       )}
     </tr>
+  );
+}
+
+/**
+ * A product that has recurring plans attached can be sold either way, so the
+ * choice belongs on the line, not on the product. Picking a plan here is what
+ * makes the line `RECURRING` when the order is created — this is the control
+ * behind hybrid billing.
+ */
+function BillingCell({
+  line,
+  editable,
+  busy,
+  onChange,
+}: {
+  line: QuoteLine;
+  editable: boolean;
+  busy: boolean;
+  onChange: (input: { subscriptionPlanId?: string | null }) => void;
+}) {
+  const plans = line.product.productSubscriptionPlans.map((entry) => entry.subscriptionPlan);
+
+  if (plans.length === 0) {
+    return <span className="text-[12px] text-slate-400">one-time</span>;
+  }
+
+  if (!editable) {
+    return line.subscriptionPlan ? (
+      <Badge tone="brand">
+        <Repeat size={11} className="mr-1" />
+        {line.subscriptionPlan.name}
+      </Badge>
+    ) : (
+      <span className="text-[12px] text-slate-400">one-time</span>
+    );
+  }
+
+  return (
+    <select
+      value={line.subscriptionPlanId ?? ''}
+      disabled={busy}
+      aria-label={`Billing for ${line.product.sku}`}
+      onChange={(e) => onChange({ subscriptionPlanId: e.target.value || null })}
+      className={`cursor-pointer rounded-lg border px-2 py-1.5 text-[12px] outline-none focus:border-brand-500 disabled:bg-slate-50 ${
+        line.subscriptionPlanId
+          ? 'border-brand-200 bg-brand-50 font-semibold text-brand-700'
+          : 'border-slate-200 text-slate-500'
+      }`}
+    >
+      <option value="">One-time</option>
+      {plans.map((plan) => (
+        <option key={plan.id} value={plan.id}>
+          {plan.name}
+        </option>
+      ))}
+    </select>
   );
 }
 

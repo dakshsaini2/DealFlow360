@@ -61,7 +61,6 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
 
   useEffect(() => {
     if (!request) {
-      setLine(null);
       return;
     }
 
@@ -148,7 +147,7 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
 
         {error && <ErrorBanner message={error} />}
 
-        {line && (
+        {request && line && (
           <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
             <Row label="List price" value={currency.format(line.listPrice)} />
             <Row

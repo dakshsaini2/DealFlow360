@@ -14,6 +14,18 @@ export const SETTING_DEFAULTS = {
   APPROVAL_RISK_THRESHOLD: "25",
   /** Default validity window applied to a new quotation, in days. */
   QUOTE_VALIDITY_DAYS: "30",
+  /**
+   * Cost of dispatching one shipment before the warehouse's own
+   * `shippingCostWeight` is applied. The split engine minimises the number of
+   * shipments, so this is what makes a second warehouse "expensive".
+   */
+  SHIPMENT_BASE_COST: "45",
+  /** Days after allocation that stock is expected to arrive for a backorder. */
+  BACKORDER_RESTOCK_DAYS: "14",
+  /** How many upcoming billing periods are scheduled ahead for a subscription. */
+  BILLING_SCHEDULE_HORIZON: "12",
+  /** Days a new invoice is given to be paid. */
+  INVOICE_DUE_DAYS: "30",
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

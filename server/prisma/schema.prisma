@@ -489,6 +489,13 @@ model QuoteLine {
   productId   String  @db.Uuid
   variantId   String? @db.Uuid
 
+  /**
+   * Set when the rep sells this line as a recurring subscription rather than a
+   * one-time purchase. It decides `OrderLine.lineType` at confirmation, which
+   * is what lets one order mix hardware with a monthly plan.
+   */
+  subscriptionPlanId String? @db.Uuid
+
   description String?
   quantity    Decimal @db.Decimal(14, 2)
 
@@ -513,9 +520,10 @@ model QuoteLine {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  quotation Quotation       @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  product   Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
-  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quotation        Quotation         @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant          ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
 
   changeRequests ChangeRequest[]
   comments       LineComment[]
@@ -524,6 +532,7 @@ model QuoteLine {
   @@index([quotationId])
   @@index([productId])
   @@index([variantId])
+  @@index([subscriptionPlanId])
 }
 
 // ============================================================
@@ -998,6 +1007,7 @@ model SubscriptionPlan {
   updatedAt          DateTime @updatedAt
 
   products      ProductSubscriptionPlan[]
+  quoteLines    QuoteLine[]
   orderLines    OrderLine[]
   subscriptions SubscriptionLine[]
 }

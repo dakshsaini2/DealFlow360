@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { PageMeta } from './customers';
+import type { SubscriptionPlanRef } from './orders';
 
 export type QuotationStatus = 'DRAFT' | 'SENT' | 'UNDER_NEGOTIATION' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED';
 export type ApprovalStatus = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'RETURNED';
@@ -49,12 +50,17 @@ export type QuoteLine = {
   discountExcessPercent: number | null;
   marginAmount: number | null;
   marginPercent: number | null;
+  /** Set makes this a recurring line; null is an ordinary one-time sale. */
+  subscriptionPlanId: string | null;
+  subscriptionPlan: SubscriptionPlanRef | null;
   product: {
     id: string;
     sku: string;
     name: string;
     unit: string;
     category: { id: string; name: string };
+    /** The recurring plans this product may be sold on, if any. */
+    productSubscriptionPlans: { subscriptionPlan: SubscriptionPlanRef }[];
   };
   variant: { id: string; sku: string; name: string } | null;
 };
@@ -147,7 +153,12 @@ export async function addQuoteLine(
 export async function updateQuoteLine(
   id: string,
   lineId: string,
-  input: { quantity?: number; discountPercent?: number },
+  input: {
+    quantity?: number;
+    discountPercent?: number;
+    /** `null` converts a recurring line back to a one-time sale. */
+    subscriptionPlanId?: string | null;
+  },
 ) {
   const { data } = await api.patch<QuotationResponse>(`/quotations/${id}/lines/${lineId}`, input);
 

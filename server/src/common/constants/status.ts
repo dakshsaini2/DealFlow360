@@ -27,6 +27,21 @@ export const APPROVAL_STATUS = {
 export type ApprovalStatus =
   (typeof APPROVAL_STATUS)[keyof typeof APPROVAL_STATUS];
 
+/** Lifecycle of one approval workflow run against a quotation. */
+export const APPROVAL_INSTANCE_STATUS = {
+  PENDING: "PENDING",
+  APPROVED: "APPROVED",
+  REJECTED: "REJECTED",
+  RETURNED: "RETURNED",
+  /** The risk moved into a different policy band, so the chain was rebuilt. */
+  SUPERSEDED: "SUPERSEDED",
+  /** The quote came back inside policy and no longer needs approval. */
+  CANCELLED: "CANCELLED",
+} as const;
+
+export type ApprovalInstanceStatus =
+  (typeof APPROVAL_INSTANCE_STATUS)[keyof typeof APPROVAL_INSTANCE_STATUS];
+
 export const APPROVAL_ACTION = {
   APPROVE: "APPROVE",
   REJECT: "REJECT",
@@ -64,6 +79,70 @@ export const BACKORDER_STATUS = {
   CONSOLIDATED: "CONSOLIDATED",
   RESOLVED: "RESOLVED",
   CANCELLED: "CANCELLED",
+} as const;
+
+export const SUBSCRIPTION_STATUS = {
+  ACTIVE: "ACTIVE",
+  PAUSED: "PAUSED",
+  CANCELLED: "CANCELLED",
+  EXPIRED: "EXPIRED",
+} as const;
+
+export type SubscriptionStatus =
+  (typeof SUBSCRIPTION_STATUS)[keyof typeof SUBSCRIPTION_STATUS];
+
+/** One dated row on a subscription line's forward billing plan. */
+export const BILLING_SCHEDULE_STATUS = {
+  SCHEDULED: "SCHEDULED",
+  INVOICED: "INVOICED",
+  PAID: "PAID",
+  SKIPPED: "SKIPPED",
+  CANCELLED: "CANCELLED",
+} as const;
+
+/** Why a mid-cycle adjustment was raised. */
+export const PRORATION_EVENT_TYPE = {
+  QUANTITY_CHANGE: "QUANTITY_CHANGE",
+  PLAN_CHANGE: "PLAN_CHANGE",
+  CANCELLATION: "CANCELLATION",
+} as const;
+
+export const INVOICE_STATUS = {
+  DRAFT: "DRAFT",
+  ISSUED: "ISSUED",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  PAID: "PAID",
+  OVERDUE: "OVERDUE",
+  VOID: "VOID",
+} as const;
+
+export type InvoiceStatus = (typeof INVOICE_STATUS)[keyof typeof INVOICE_STATUS];
+
+/** A one-time sale bills once; a recurring period bills every cycle. */
+export const INVOICE_TYPE = {
+  ONE_TIME: "ONE_TIME",
+  RECURRING: "RECURRING",
+} as const;
+
+export const PAYMENT_STATUS = {
+  PENDING: "PENDING",
+  COMPLETED: "COMPLETED",
+  FAILED: "FAILED",
+  REFUNDED: "REFUNDED",
+} as const;
+
+export const PAYMENT_METHOD = {
+  BANK_TRANSFER: "BANK_TRANSFER",
+  CARD: "CARD",
+  CHEQUE: "CHEQUE",
+  CREDIT_NOTE: "CREDIT_NOTE",
+} as const;
+
+export const CREDIT_NOTE_STATUS = {
+  DRAFT: "DRAFT",
+  ISSUED: "ISSUED",
+  APPLIED: "APPLIED",
+  VOID: "VOID",
 } as const;
 
 export const CHANGE_REQUEST_STATUS = {

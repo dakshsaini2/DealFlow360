@@ -93,9 +93,12 @@ export default function ProductsList() {
 
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal);
+    const timer = setTimeout(() => load(controller.signal), 0);
 
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [load]);
 
   const selectClasses =

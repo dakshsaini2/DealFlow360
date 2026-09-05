@@ -647,8 +647,10 @@ async function main() {
     { code: "CUST-010", name: "Relecloud Hosting", tier: "Standard", rep: repId, email: "accounts@relecloud.example" },
   ];
 
+  const customerIdByCode = new Map<string, string>();
+
   for (const spec of customerSpecs) {
-    await prisma.customer.upsert({
+    const customer = await prisma.customer.upsert({
       where: { customerCode: spec.code },
       update: {
         name: spec.name,
@@ -664,6 +666,32 @@ async function main() {
         shippingAddress: "1 Market St, Springfield",
         customerTierId: tierByName.get(spec.tier)!,
         createdByUserId: spec.rep,
+      },
+    });
+
+    customerIdByCode.set(spec.code, customer.id);
+  }
+
+  /* ── Portal access ──────────────────────────────── */
+
+  // The customer-facing negotiation screen is a restricted view of the
+  // accounts a portal user is actually attached to, so the demo customer needs
+  // that link or the portal has nothing to show.
+  const portalUserId = userByEmail.get("customer@dealflow360.com")!;
+
+  for (const [index, code] of ["CUST-001", "CUST-010"].entries()) {
+    await prisma.customerUser.upsert({
+      where: {
+        customerId_userId: {
+          customerId: customerIdByCode.get(code)!,
+          userId: portalUserId,
+        },
+      },
+      update: { isPrimary: index === 0 },
+      create: {
+        customerId: customerIdByCode.get(code)!,
+        userId: portalUserId,
+        isPrimary: index === 0,
       },
     });
   }

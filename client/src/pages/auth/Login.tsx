@@ -10,7 +10,7 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
-  const from = (location.state as { from?: string } | null)?.from ?? '/app';
+  const from = (location.state as { from?: string } | null)?.from ?? null;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,8 +22,13 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await login(email.trim(), password);
-      navigate(from, { replace: true });
+      const user = await login(email.trim(), password);
+
+      // A portal user has no internal workspace to land on, so the default
+      // destination follows the role rather than being hard-coded to /app.
+      const home = user.roles.includes('CUSTOMER') && user.roles.length === 1 ? '/portal' : '/app';
+
+      navigate(from ?? home, { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not sign you in. Please try again.'));
     } finally {

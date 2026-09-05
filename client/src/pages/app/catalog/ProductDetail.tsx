@@ -107,13 +107,13 @@ export default function ProductDetailPage() {
                     <th className="px-5 py-3 font-semibold">Tier</th>
                     <th className="px-5 py-3 font-semibold">Price list</th>
                     <th className="px-5 py-3 text-right font-semibold">Unit price</th>
-                    <th className="px-5 py-3 text-right font-semibold">vs list</th>
+                    <th className="px-5 py-3 text-right font-semibold">Discount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {product.tierPricing.map((row) => {
                     const delta = product.basePrice
-                      ? Math.round(((row.unitPrice - product.basePrice) / product.basePrice) * 1000) / 10
+                      ? Math.round(((row.unitPrice - product.basePrice) / product.basePrice) * 1000) / -10
                       : 0;
 
                     return (
