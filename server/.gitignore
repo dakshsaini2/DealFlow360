@@ -28,3 +28,5 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+# Prisma generated client
+src/generated/
