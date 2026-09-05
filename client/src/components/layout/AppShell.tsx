@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
+  Activity,
   BarChart3,
   Boxes,
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   LogOut,
   Menu,
   Package,
+  Receipt,
   ShoppingCart,
   Users,
   X,
@@ -31,8 +33,10 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app/customers', label: 'Customers', icon: Users },
   { to: '/app/products', label: 'Catalog', icon: Package },
   { to: '/app/quotations', label: 'Quotations', icon: FileText },
-  { to: '/app/approvals', label: 'Approvals', icon: CheckCircle2, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
-  { to: '/app/orders', label: 'Orders', icon: ShoppingCart, soon: true },
+  { to: '/app/approvals', label: 'Approvals', icon: CheckCircle2, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'] },
+  { to: '/app/orders', label: 'Orders', icon: ShoppingCart },
+  { to: '/app/invoices', label: 'Invoices', icon: Receipt },
+  { to: '/app/deal-health', label: 'Deal health', icon: Activity },
   { to: '/app/inventory', label: 'Inventory', icon: Boxes, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
   { to: '/app/analytics', label: 'Analytics', icon: BarChart3, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
 ];

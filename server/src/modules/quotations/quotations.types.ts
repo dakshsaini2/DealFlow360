@@ -31,6 +31,8 @@ export const createQuotationSchema = z.object({
         quantity: z.coerce.number().positive().max(1_000_000).default(1),
         discountPercent: z.coerce.number().min(0).max(100).default(0),
         description: z.string().trim().max(400).optional(),
+        /** Present makes this a recurring line rather than a one-time sale. */
+        subscriptionPlanId: z.uuid().optional(),
       }),
     )
     .max(200)
@@ -52,6 +54,8 @@ export const addLineSchema = z.object({
   quantity: z.coerce.number().positive().max(1_000_000).default(1),
   discountPercent: z.coerce.number().min(0).max(100).default(0),
   description: z.string().trim().max(400).optional(),
+  /** Present makes this a recurring line rather than a one-time sale. */
+  subscriptionPlanId: z.uuid().optional(),
 });
 
 export const updateLineSchema = z
@@ -59,6 +63,8 @@ export const updateLineSchema = z
     quantity: z.coerce.number().positive().max(1_000_000).optional(),
     discountPercent: z.coerce.number().min(0).max(100).optional(),
     description: z.string().trim().max(400).nullable().optional(),
+    /** `null` converts a recurring line back to a one-time sale. */
+    subscriptionPlanId: z.uuid().nullable().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "at least one field must be provided",
@@ -78,3 +84,30 @@ export type CreateQuotationInput = z.infer<typeof createQuotationSchema>;
 export type UpdateQuotationInput = z.infer<typeof updateQuotationSchema>;
 export type AddLineInput = z.infer<typeof addLineSchema>;
 export type UpdateLineInput = z.infer<typeof updateLineSchema>;
+
+/* ── negotiation (the seller's half of the portal thread) ── */
+
+export const negotiationParamsSchema = z.object({
+  id: z.uuid("must be a valid id"),
+  entryId: z.uuid("must be a valid id"),
+});
+
+export const replySchema = z.object({
+  quoteLineId: z.uuid().optional(),
+  comment: z.string().trim().min(1, "say something").max(2000),
+});
+
+export const resolveChangeRequestSchema = z.object({
+  accept: z.coerce.boolean(),
+  /** Sent back to the customer as a reply in the thread. */
+  reason: z.string().trim().max(2000).optional(),
+});
+
+export const resolveCounterOfferSchema = z.object({
+  accept: z.coerce.boolean(),
+  reason: z.string().trim().max(2000).optional(),
+});
+
+export type ReplyInput = z.infer<typeof replySchema>;
+export type ResolveChangeRequestInput = z.infer<typeof resolveChangeRequestSchema>;
+export type ResolveCounterOfferInput = z.infer<typeof resolveCounterOfferSchema>;

@@ -17,6 +17,10 @@ import { serialize } from "../../common/utils/serialize.js";
 import { getNumericSetting } from "../../common/utils/settings.js";
 import { resolvePricing, type PricedLine } from "../catalog/pricing.service.js";
 import { calculateRisk, type RiskBreakdown } from "./risk.service.js";
+import {
+  cancelOpenInstances,
+  openApprovalInstance,
+} from "../approvals/approvals.service.js";
 import type {
   AddLineInput,
   CreateQuotationInput,
@@ -151,6 +155,10 @@ export async function createQuotation(
     ? new Date(input.validUntil)
     : new Date(Date.now() + validityDays * 24 * 60 * 60 * 1000);
 
+  for (const line of input.lines ?? []) {
+    await assertPlanSellsProduct(line.productId, line.subscriptionPlanId);
+  }
+
   const quotation = await prisma.quotation.create({
     data: {
       quoteNumber: await nextQuoteNumber(),
@@ -170,6 +178,7 @@ export async function createQuotation(
               // Real figures land in the recalculation immediately below.
               unitPrice: 0,
               discountPercent: line.discountPercent,
+              subscriptionPlanId: line.subscriptionPlanId ?? null,
             })),
           }
         : undefined,
@@ -221,6 +230,7 @@ export async function updateQuotation(
 
 export async function addLine(user: AuthUser, id: string, input: AddLineInput) {
   await loadForWrite(user, id);
+  await assertPlanSellsProduct(input.productId, input.subscriptionPlanId);
 
   const line = await prisma.quoteLine.create({
     data: {
@@ -231,6 +241,7 @@ export async function addLine(user: AuthUser, id: string, input: AddLineInput) {
       quantity: input.quantity,
       unitPrice: 0,
       discountPercent: input.discountPercent,
+      subscriptionPlanId: input.subscriptionPlanId ?? null,
     },
     select: { id: true },
   });
@@ -260,11 +271,25 @@ export async function updateLine(
 
   const existing = await prisma.quoteLine.findFirst({
     where: { id: lineId, quotationId: id },
-    select: { id: true, quantity: true, discountPercent: true, description: true },
+    select: {
+      id: true,
+      productId: true,
+      quantity: true,
+      discountPercent: true,
+      description: true,
+      subscriptionPlanId: true,
+    },
   });
 
   if (!existing) {
     throw new NotFoundError("Quote line not found");
+  }
+
+  if (input.subscriptionPlanId !== undefined) {
+    await assertPlanSellsProduct(
+      existing.productId,
+      input.subscriptionPlanId ?? undefined,
+    );
   }
 
   await prisma.quoteLine.update({
@@ -276,6 +301,9 @@ export async function updateLine(
         : {}),
       ...(input.description !== undefined
         ? { description: input.description }
+        : {}),
+      ...(input.subscriptionPlanId !== undefined
+        ? { subscriptionPlanId: input.subscriptionPlanId }
         : {}),
     },
   });
@@ -291,6 +319,7 @@ export async function updateLine(
     oldValues: {
       quantity: Number(existing.quantity),
       discountPercent: Number(existing.discountPercent),
+      subscriptionPlanId: existing.subscriptionPlanId,
     },
     newValues: input,
   });
@@ -369,7 +398,7 @@ export async function sendQuotation(user: AuthUser, id: string, reason?: string)
     ]);
   }
 
-  const { approvalRequired } = await recalculate(id);
+  const { approvalRequired, risk } = await recalculate(id);
 
   await prisma.quotation.update({
     where: { id },
@@ -381,6 +410,12 @@ export async function sendQuotation(user: AuthUser, id: string, reason?: string)
         : APPROVAL_STATUS.NOT_REQUIRED,
     },
   });
+
+  // The recalculation above ran while this was still a draft, so it skipped
+  // building the chain. Now that the quote has actually gone out, route it.
+  if (approvalRequired) {
+    await openApprovalInstance(id, risk.score, risk.reason);
+  }
 
   await snapshot(user, id, reason ?? "Quotation sent");
 
@@ -516,6 +551,17 @@ export async function recalculate(id: string) {
       },
     }),
   ]);
+
+  // Keep the approval chain in step with the score: open or rebuild it when
+  // approval is needed, close it when the quote comes back inside policy.
+  // Drafts are exempt — approval only becomes real once the quote is sent.
+  if (quotation.status !== QUOTATION_STATUS.DRAFT) {
+    if (approvalRequired) {
+      await openApprovalInstance(id, risk.score, risk.reason);
+    } else {
+      await cancelOpenInstances(id, "Quotation is back inside policy");
+    }
+  }
 
   if (nextApprovalStatus !== null) {
     await recordAudit({
@@ -722,6 +768,15 @@ const DETAIL_SELECT = {
       discountExcessPercent: true,
       marginAmount: true,
       marginPercent: true,
+      subscriptionPlanId: true,
+      subscriptionPlan: {
+        select: {
+          id: true,
+          name: true,
+          billingInterval: true,
+          intervalCount: true,
+        },
+      },
       product: {
         select: {
           id: true,
@@ -729,6 +784,20 @@ const DETAIL_SELECT = {
           name: true,
           unit: true,
           category: { select: { id: true, name: true } },
+          // Which recurring plans this product may be sold on, so the builder
+          // can offer the choice without a second round trip.
+          productSubscriptionPlans: {
+            select: {
+              subscriptionPlan: {
+                select: {
+                  id: true,
+                  name: true,
+                  billingInterval: true,
+                  intervalCount: true,
+                },
+              },
+            },
+          },
         },
       },
       variant: { select: { id: true, sku: true, name: true } },
@@ -769,6 +838,39 @@ async function loadForWrite(user: AuthUser, id: string) {
 }
 
 /** `Q-2026-0001`, sequential within the calendar year. */
+/**
+ * A recurring line is only meaningful when the chosen plan is actually offered
+ * for that product, so an arbitrary plan id cannot turn a laptop into a
+ * subscription. `undefined` / `null` means an ordinary one-time line.
+ */
+async function assertPlanSellsProduct(
+  productId: string,
+  subscriptionPlanId: string | null | undefined,
+) {
+  if (!subscriptionPlanId) {
+    return;
+  }
+
+  const pairing = await prisma.productSubscriptionPlan.findUnique({
+    where: {
+      productId_subscriptionPlanId: { productId, subscriptionPlanId },
+    },
+    select: { subscriptionPlan: { select: { isActive: true } } },
+  });
+
+  if (!pairing) {
+    throw new ValidationError("This product is not sold on that plan", [
+      "subscriptionPlanId: no such plan for this product",
+    ]);
+  }
+
+  if (!pairing.subscriptionPlan.isActive) {
+    throw new ValidationError("That subscription plan is no longer offered", [
+      "subscriptionPlanId: plan is inactive",
+    ]);
+  }
+}
+
 async function nextQuoteNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const prefix = `Q-${year}-`;

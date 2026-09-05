@@ -3,6 +3,7 @@ import {
   requireAuth,
   requireRole,
 } from "../../common/middleware/auth.middleware.js";
+import * as ordersController from "../orders/orders.controller.js";
 import { recommendationsRouter } from "../recommendations/recommendations.routes.js";
 import * as controller from "./quotations.controller.js";
 
@@ -26,3 +27,24 @@ quotationsRouter.patch("/:id/lines/:lineId", canWrite, controller.updateLine);
 quotationsRouter.delete("/:id/lines/:lineId", canWrite, controller.removeLine);
 quotationsRouter.post("/:id/discount", canWrite, controller.applyOrderDiscount);
 quotationsRouter.post("/:id/send", canWrite, controller.send);
+
+/**
+ * Confirmation lives in the orders module — it is the quote-to-order handover,
+ * and it is gated on approval having actually cleared.
+ */
+quotationsRouter.post("/:id/confirm", canWrite, ordersController.confirm);
+
+/* ── negotiation: the seller's half of the customer portal thread ── */
+
+quotationsRouter.get("/:id/negotiation", controller.negotiationThread);
+quotationsRouter.post("/:id/negotiation/reply", canWrite, controller.reply);
+quotationsRouter.post(
+  "/:id/negotiation/change-requests/:entryId",
+  canWrite,
+  controller.resolveChangeRequest,
+);
+quotationsRouter.post(
+  "/:id/negotiation/counter-offers/:entryId",
+  canWrite,
+  controller.resolveCounterOffer,
+);

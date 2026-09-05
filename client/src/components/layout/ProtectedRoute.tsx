@@ -8,7 +8,18 @@ import type { UserRole } from '../../util/api';
  * spinner rather than redirecting, so a page reload does not bounce a signed-in
  * user out to /login.
  */
-export default function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
+export default function ProtectedRoute({
+  roles,
+  /**
+   * Where a signed-in user without the required role is sent. It defaults to
+   * the internal workspace, but the portal and workspace subtrees point at each
+   * other so each role lands on the surface that is actually theirs.
+   */
+  redirectTo = '/app',
+}: {
+  roles?: UserRole[];
+  redirectTo?: string;
+}) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -25,7 +36,7 @@ export default function ProtectedRoute({ roles }: { roles?: UserRole[] }) {
   }
 
   if (roles && !user.roles.some((role) => roles.includes(role))) {
-    return <Navigate to="/app" replace />;
+    return <Navigate to={redirectTo} replace />;
   }
 
   return <Outlet />;
