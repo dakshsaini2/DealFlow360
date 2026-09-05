@@ -3,12 +3,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Lock, Mail, ShieldCheck, User } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, PasswordField, SubmitButton } from '../../components/auth/AuthForm';
-import { api, getApiErrorMessage, type AuthResult } from '../../util/api';
+import { getApiErrorMessage } from '../../util/api';
+import { useAuth } from '../../hooks/useAuth';
 
 const MIN_PASSWORD_LENGTH = 8;
 
 export default function Signup() {
   const navigate = useNavigate();
+  const { signup } = useAuth();
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -36,13 +38,13 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      await api.post<AuthResult>('/auth/signup', {
+      await signup({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
         password,
       });
-      navigate('/');
+      navigate('/app', { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not create your account. Please try again.'));
     } finally {

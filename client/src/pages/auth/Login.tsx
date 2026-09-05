@@ -1,12 +1,16 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Lock, Mail } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, PasswordField, SubmitButton } from '../../components/auth/AuthForm';
-import { api, getApiErrorMessage, type AuthResult } from '../../util/api';
+import { getApiErrorMessage } from '../../util/api';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+  const from = (location.state as { from?: string } | null)?.from ?? '/app';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -18,8 +22,8 @@ export default function Login() {
     setLoading(true);
 
     try {
-      await api.post<AuthResult>('/auth/login', { email: email.trim(), password });
-      navigate('/');
+      await login(email.trim(), password);
+      navigate(from, { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not sign you in. Please try again.'));
     } finally {

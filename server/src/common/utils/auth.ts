@@ -59,6 +59,7 @@ function isJwtPayload(value: unknown): value is JwtPayload {
   return (
     typeof claims.sub === "string" &&
     typeof claims.email === "string" &&
-    isUserRole(claims.role)
+    Array.isArray(claims.roles) &&
+    claims.roles.every(isUserRole)
   );
 }

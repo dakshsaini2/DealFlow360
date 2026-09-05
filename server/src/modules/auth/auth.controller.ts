@@ -1,11 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
-import { MissingTokenError } from "../../common/errors/AuthError.js";
+import { currentUser } from "../../common/middleware/auth.middleware.js";
+import { validate } from "../../common/utils/validate.js";
 import * as authService from "./auth.service.js";
-import { parseCredentials, parseSignup } from "./auth.types.js";
+import { loginSchema, signupSchema } from "./auth.types.js";
 
 export async function signup(req: Request, res: Response, next: NextFunction) {
   try {
-    res.status(201).json(await authService.signup(parseSignup(req.body)));
+    const input = validate(signupSchema, req.body);
+    res.status(201).json(await authService.signup(input));
   } catch (err) {
     next(err);
   }
@@ -13,8 +15,8 @@ export async function signup(req: Request, res: Response, next: NextFunction) {
 
 export async function login(req: Request, res: Response, next: NextFunction) {
   try {
-    const credentials = parseCredentials(req.body);
-    res.json(await authService.login(credentials));
+    const input = validate(loginSchema, req.body);
+    res.json(await authService.login(input));
   } catch (err) {
     next(err);
   }
@@ -22,11 +24,7 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 
 export async function me(req: Request, res: Response, next: NextFunction) {
   try {
-    if (!req.user) {
-      throw new MissingTokenError();
-    }
-
-    res.json({ user: await authService.getUserById(req.user.sub) });
+    res.json({ user: await authService.getUserById(currentUser(req).sub) });
   } catch (err) {
     next(err);
   }

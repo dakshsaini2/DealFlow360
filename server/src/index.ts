@@ -6,6 +6,8 @@ import {
 import { env } from "./common/utils/env.js";
 import { disconnectPrisma } from "./common/utils/prisma.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { customersRouter } from "./modules/customers/customers.routes.js";
+import { dashboardRouter } from "./modules/dashboard/dashboard.routes.js";
 import cors from "cors";
 
 const app = express();
@@ -24,6 +26,8 @@ app.get("/api/health", (req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/dashboard", dashboardRouter);
+app.use("/api/customers", customersRouter);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

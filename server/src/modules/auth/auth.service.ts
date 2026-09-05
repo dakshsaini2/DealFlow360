@@ -5,7 +5,7 @@ import {
 import { NotFoundError } from "../../common/errors/AppError.js";
 import {
   DEFAULT_USER_ROLE,
-  isUserRole,
+  normalizeRoles,
   type UserRole,
 } from "../../common/types/auth.types.js";
 import {
@@ -14,9 +14,13 @@ import {
   verifyPassword,
 } from "../../common/utils/auth.js";
 import { prisma } from "../../common/utils/prisma.js";
-import type { AuthResult, LoginInput, PublicUser, SignupInput } from "./auth.types.js";
+import type {
+  AuthResult,
+  LoginInput,
+  PublicUser,
+  SignupInput,
+} from "./auth.types.js";
 
-/** Roles live in their own table, joined to the user through `UserRole`. */
 const WITH_ROLES = { userRoles: { include: { role: true } } } as const;
 
 type UserRecord = {
@@ -61,21 +65,29 @@ export async function signup({
   return toAuthResult(user);
 }
 
-export async function login({ email, password }: LoginInput): Promise<AuthResult> {
+export async function login({
+  email,
+  password,
+}: LoginInput): Promise<AuthResult> {
   const user = await prisma.user.findUnique({
     where: { email },
     include: WITH_ROLES,
   });
 
-  // Hash a throwaway password when the user is unknown so that both branches
-  // cost roughly the same and cannot be told apart by timing.
-  const matches = user
-    ? await verifyPassword(password, user.passwordHash)
-    : await verifyPassword(password, DUMMY_HASH);
-
-  if (!user || !matches) {
+  if (!user) {
     throw new InvalidCredentialsError();
   }
+
+  const matches = await verifyPassword(password, user.passwordHash);
+
+  if (!matches) {
+    throw new InvalidCredentialsError();
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
 
   return toAuthResult(user);
 }
@@ -100,7 +112,7 @@ function toAuthResult(user: UserRecord): AuthResult {
     token: signToken({
       sub: publicUser.id,
       email: publicUser.email,
-      role: publicUser.role,
+      roles: publicUser.roles,
     }),
     user: publicUser,
   };
@@ -112,17 +124,16 @@ function toPublicUser(user: Omit<UserRecord, "passwordHash">): PublicUser {
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
-    role: toUserRole(user.userRoles),
+    roles: toUserRoles(user.userRoles),
   };
 }
 
-/** Picks the first recognised role name; unknown or missing roles fall back. */
-function toUserRole(userRoles: { role: { name: string } }[]): UserRole {
-  return (
-    userRoles.map((entry) => entry.role.name).find(isUserRole) ??
-    DEFAULT_USER_ROLE
-  );
-}
+/**
+ * A user with no recognized role still needs one, otherwise every route guard
+ * rejects them; the least-privileged default is used.
+ */
+function toUserRoles(userRoles: { role: { name: string } }[]): UserRole[] {
+  const roles = normalizeRoles(userRoles.map((entry) => entry.role.name));
 
-/** Bcrypt hash of a value no user can log in with; used to equalize timing. */
-const DUMMY_HASH = "$2b$10$CwTycUXWue0Thq9StjUM0uJ8.aVjO9tQdJ0dEbnMBd1G9YQ8Qz4Zu";
+  return roles.length > 0 ? roles : [DEFAULT_USER_ROLE];
+}

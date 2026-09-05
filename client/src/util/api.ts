@@ -3,15 +3,23 @@ import axios, { AxiosError, AxiosHeaders } from 'axios';
 const TOKEN_KEY = 'dealflow360.token';
 const USER_KEY = 'dealflow360.user';
 
-export type UserRole = 'user' | 'admin';
+export const USER_ROLES = ['ADMIN', 'SALES_MANAGER', 'SALES_REP', 'CUSTOMER'] as const;
+
+export type UserRole = (typeof USER_ROLES)[number];
 
 export type PublicUser = {
   id: string;
   email: string;
   firstName: string;
   lastName: string;
-  role: UserRole;
+  /** A user can hold several roles — a manager is usually a rep too. */
+  roles: UserRole[];
 };
+
+/** Mirrors the server's `requireRole`: true when the user holds any of them. */
+export function hasAnyRole(user: PublicUser | null, roles: readonly UserRole[]): boolean {
+  return user ? user.roles.some((role) => roles.includes(role)) : false;
+}
 
 export type AuthResult = {
   token: string;
