@@ -24,7 +24,7 @@ pnpm-debug.log*
 # Editor
 .vscode/
 .idea/
-
+test
 # OS
 .DS_Store
 Thumbs.db
