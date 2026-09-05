@@ -10,6 +10,8 @@ import CustomersList from './pages/app/customers/CustomersList'
 import CustomerDetail from './pages/app/customers/CustomerDetail'
 import ProductsList from './pages/app/catalog/ProductsList'
 import ProductDetail from './pages/app/catalog/ProductDetail'
+import QuotationsList from './pages/app/quotations/QuotationsList'
+import QuotationBuilder from './pages/app/quotations/QuotationBuilder'
 
 function App() {
   return (
@@ -29,6 +31,8 @@ function App() {
               <Route path="customers/:id" element={<CustomerDetail />} />
               <Route path="products" element={<ProductsList />} />
               <Route path="products/:id" element={<ProductDetail />} />
+              <Route path="quotations" element={<QuotationsList />} />
+              <Route path="quotations/:id" element={<QuotationBuilder />} />
             </Route>
           </Route>
         </Routes>

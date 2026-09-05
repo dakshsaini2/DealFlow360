@@ -13,6 +13,7 @@ src/
     ├── auth/                 routes → controller → service → prisma
     ├── catalog/              products, categories and the pricing engine
     ├── customers/            accounts, tiers and deal history
+    ├── quotations/           quote building, recalculation and blended risk
     └── dashboard/            role-scoped summary counters
 ```
 
@@ -48,6 +49,16 @@ with the right status. Unknown errors are logged and become a generic 500
 | `GET` | `/api/catalog/products/:id` | Bearer | – |
 | `GET` | `/api/catalog/categories` | Bearer | – |
 | `POST` | `/api/catalog/pricing/resolve` | Bearer | `{ customerId \| customerTierId, currencyCode?, lines[] }` |
+| `GET` | `/api/quotations` | Bearer | `?q&customerId&status&approvalStatus&scope&sort&page` |
+| `GET` | `/api/quotations/:id` | Bearer | – |
+| `GET` | `/api/quotations/:id/revisions` | Bearer | – |
+| `POST` | `/api/quotations` | Rep+ | `{ customerId, currencyCode?, validUntil?, lines[]? }` |
+| `PATCH` | `/api/quotations/:id` | Rep+ | `{ validUntil?, teamId? }` |
+| `POST` | `/api/quotations/:id/lines` | Rep+ | `{ productId, variantId?, quantity, discountPercent? }` |
+| `PATCH` | `/api/quotations/:id/lines/:lineId` | Rep+ | `{ quantity?, discountPercent?, description? }` |
+| `DELETE` | `/api/quotations/:id/lines/:lineId` | Rep+ | – |
+| `POST` | `/api/quotations/:id/discount` | Rep+ | `{ discountPercent }` |
+| `POST` | `/api/quotations/:id/send` | Rep+ | `{ reason? }` |
 
 Signup and login return `{ token, user: { id, email, firstName, lastName, roles } }`.
 Emails are normalized (trimmed + lowercased) and passwords must be at least 8
@@ -91,6 +102,48 @@ largest discount that still leaves ~8% margin after the tier's price list is
 applied. Using the worst case rather than the average is what makes the ceiling
 a guarantee: no product can be sold below the floor while staying within its
 limit. `marginPercentAtCeiling` on every line makes that visible.
+
+## Quotations
+
+`recalculate()` in `quotations.service.ts` is the **only** write path for money
+on a quotation. Every mutation ends there: lines are re-priced through the
+catalog engine, per-line governance figures (`allowedDiscountPercent`,
+`discountExcessPercent`, margin) are stored, header totals are summed, the
+price list actually used is recorded, and the blended risk score is recomputed.
+Nothing else may write those columns, so stored numbers cannot drift from the
+pricing rules.
+
+### Blended risk score
+
+`risk.service.ts`. Every line is checked against **its own** ceiling, then two
+views of the order are taken and the harsher wins:
+
+- **value-weighted average excess** — catches many lines each slightly over,
+  which is the case a single-worst-line check would miss. Weighting by value
+  stops 20 points over on a $50 accessory outranking 5 points on a $200k order.
+- **the single worst line** — catches one badly discounted item on its own.
+
+**Margin is a second, independent input.** Without it a rep could discount every
+line exactly to its ceiling, score zero, and auto-approve an order making almost
+nothing — a ceiling bounds discretion, it does not guarantee a healthy deal. The
+two combine with `max` so neither masks the other, and both components are
+returned so an approver sees which one fired.
+
+Scaling factors are calibrated against the approval threshold, not picked by
+feel: a systematic ~3 point overage, a single line ~8 points over, or an order
+6 points under the margin target each land exactly at the threshold. Change them
+together with the seeded `ApprovalPolicy` bands.
+
+### Approval and versioning
+
+`syncApprovalStatus()` keeps approval honest after every recalculation: a sent
+quote that drifts over the threshold re-enters approval on its own, and one
+discounted back inside policy stops asking. The rep never requests or cancels
+approval by hand. Drafts are exempt.
+
+Changes to a quote that has already been sent create a `QuoteRevision` snapshot
+and bump `versionNumber`; draft edits do not, or history would be one entry per
+keystroke.
 
 ## Conventions
 
