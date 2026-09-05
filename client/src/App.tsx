@@ -18,6 +18,8 @@ import OrderDetail from './pages/app/orders/OrderDetail'
 import InvoicesList from './pages/app/billing/InvoicesList'
 import InvoiceDetail from './pages/app/billing/InvoiceDetail'
 import DealHealth from './pages/app/health/DealHealth'
+import Reports from './pages/app/reports/Reports'
+import Backend from './pages/app/admin/Backend'
 import PortalLayout from './pages/portal/PortalLayout'
 import PortalQuotations from './pages/portal/PortalQuotations'
 import PortalQuotation from './pages/portal/PortalQuotation'
@@ -65,8 +67,14 @@ function App() {
               <Route path="invoices" element={<InvoicesList />} />
               <Route path="invoices/:id" element={<InvoiceDetail />} />
               <Route path="deal-health" element={<DealHealth />} />
+              <Route element={<ProtectedRoute roles={['ADMIN', 'SALES_MANAGER', 'FINANCE', 'SALES_REP']} />}>
+                <Route path="reports" element={<Reports />} />
+              </Route>
               <Route element={<ProtectedRoute roles={['ADMIN', 'SALES_MANAGER', 'FINANCE']} />}>
                 <Route path="approvals" element={<ApprovalsQueue />} />
+              </Route>
+              <Route element={<ProtectedRoute roles={['ADMIN', 'SALES_MANAGER']} />}>
+                <Route path="backend" element={<Backend />} />
               </Route>
             </Route>
           </Route>

@@ -11,8 +11,7 @@ import {
   Spinner,
 } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
-import { currency } from '../../../util/catalog';
-import { fetchCategories, type Category } from '../../../util/catalog';
+import { currency, fetchCategories, type Category } from '../../../util/catalog';
 import { humanStatus } from '../../../util/quotations';
 import {
   downloadSalesCsv,
@@ -397,6 +396,17 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
+/**
+ * Tailwind's compiler only sees class names written out in full, so the
+ * alignment is looked up rather than interpolated — `text-${align}` would
+ * compile to nothing.
+ */
+const ALIGN_CLASSES = {
+  left: 'text-left',
+  center: 'text-center',
+  right: 'text-right',
+} as const;
+
 function Table({
   head,
   rows,
@@ -415,7 +425,7 @@ function Table({
       <thead>
         <tr className="border-b border-slate-100 text-[11px] uppercase tracking-wide text-slate-400">
           {head.map((cell, index) => (
-            <th key={cell} className={`py-2 font-semibold text-${align[index]}`}>
+            <th key={cell} className={`py-2 font-semibold ${ALIGN_CLASSES[align[index] ?? 'left']}`}>
               {cell}
             </th>
           ))}
@@ -427,7 +437,7 @@ function Table({
             {row.map((cell, index) => (
               <td
                 key={`${cell}-${index}`}
-                className={`py-2 text-[13px] text-slate-700 text-${align[index]}`}
+                className={`py-2 text-[13px] text-slate-700 ${ALIGN_CLASSES[align[index] ?? 'left']}`}
               >
                 {cell}
               </td>

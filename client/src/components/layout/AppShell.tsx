@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 import {
   Activity,
+  Settings,
   BarChart3,
-  Boxes,
   CheckCircle2,
   FileText,
   LayoutDashboard,
@@ -37,8 +37,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/app/orders', label: 'Orders', icon: ShoppingCart },
   { to: '/app/invoices', label: 'Invoices', icon: Receipt },
   { to: '/app/deal-health', label: 'Deal health', icon: Activity },
-  { to: '/app/inventory', label: 'Inventory', icon: Boxes, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
-  { to: '/app/analytics', label: 'Analytics', icon: BarChart3, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
+  { to: '/app/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/app/backend', label: 'Back-end', icon: Settings, roles: ['ADMIN', 'SALES_MANAGER'] },
 ];
 
 export default function AppShell() {
