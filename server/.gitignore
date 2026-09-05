@@ -9,7 +9,7 @@ build/
 .env
 .env.local
 .env.*.local
-hello
+
 # Prisma
 # Keep migrations in Git
 # prisma/migrations/
