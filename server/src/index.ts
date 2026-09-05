@@ -1,17 +1,34 @@
 import express from "express";
-import dotenv from "dotenv";
-
-dotenv.config();
+import {
+  errorHandler,
+  notFoundHandler,
+} from "./common/middleware/error.middleware.js";
+import { env } from "./common/utils/env.js";
+import { disconnectPrisma } from "./common/utils/prisma.js";
+import { authRouter } from "./modules/auth/auth.routes.js";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.use("/api/auth", authRouter);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+const server = app.listen(env.port, () => {
+  console.log(`Server running on http://localhost:${env.port}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.on(signal, () => {
+    server.close(async () => {
+      await disconnectPrisma();
+      process.exit(0);
+    });
+  });
+}
