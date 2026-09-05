@@ -3,7 +3,7 @@ import axios, { AxiosError, AxiosHeaders } from 'axios';
 const TOKEN_KEY = 'dealflow360.token';
 const USER_KEY = 'dealflow360.user';
 
-export const USER_ROLES = ['ADMIN', 'SALES_MANAGER', 'SALES_REP', 'CUSTOMER'] as const;
+export const USER_ROLES = ['ADMIN', 'SALES_MANAGER', 'FINANCE', 'SALES_REP', 'CUSTOMER'] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 

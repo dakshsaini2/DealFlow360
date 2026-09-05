@@ -11,6 +11,7 @@ src/
 │   └── utils/                env, prisma, password + token, validate, serialize, pagination
 └── modules/
     ├── auth/                 routes → controller → service → prisma
+    ├── catalog/              products, categories and the pricing engine
     ├── customers/            accounts, tiers and deal history
     └── dashboard/            role-scoped summary counters
 ```
@@ -43,6 +44,10 @@ with the right status. Unknown errors are logged and become a generic 500
 | `GET` | `/api/customers/:id` | Bearer | – |
 | `POST` | `/api/customers` | Rep+ | `{ name, email?, phone?, …, customerTierId? }` |
 | `PATCH` | `/api/customers/:id` | Rep+ | any subset of the create body, plus `isActive` |
+| `GET` | `/api/catalog/products` | Bearer | `?q&categoryId&productType&status&sort&recurringOnly&page&pageSize` |
+| `GET` | `/api/catalog/products/:id` | Bearer | – |
+| `GET` | `/api/catalog/categories` | Bearer | – |
+| `POST` | `/api/catalog/pricing/resolve` | Bearer | `{ customerId \| customerTierId, currencyCode?, lines[] }` |
 
 Signup and login return `{ token, user: { id, email, firstName, lastName, roles } }`.
 Emails are normalized (trimmed + lowercased) and passwords must be at least 8
@@ -50,7 +55,7 @@ characters.
 
 ## Roles
 
-`ADMIN`, `SALES_MANAGER`, `SALES_REP`, `CUSTOMER` — defined once in
+`ADMIN`, `SALES_MANAGER`, `FINANCE`, `SALES_REP`, `CUSTOMER` — defined once in
 `common/types/auth.types.ts`. A user may hold several, so the JWT carries
 `roles: UserRole[]` and `requireRole(...)` passes when the caller holds **any**
 of the listed roles. These same strings are what `ApprovalStep.role` stores, so
@@ -63,6 +68,30 @@ sees only the accounts they are linked to through `CustomerUser`. Setting
 because the tier decides the discount ceiling a quote is checked against — a
 rep's new accounts land on `Standard`.
 
+## Pricing
+
+`catalog/pricing.service.ts` is the only place a price or a discount ceiling is
+decided. The quote builder, the upsell panel and the approval engine all read
+their numbers from it, so they cannot disagree.
+
+**Unit price** — the customer's tier price list (matching currency, inside its
+validity window, narrowest quantity band, variant row beating the product-wide
+one) falls back to `Product.basePrice` plus any variant uplift. The response
+says which was used via `priceSource`.
+
+**Discount ceiling** — a `DiscountRule` for the tier *and* the product's
+category wins; then a tier-wide rule; then `CustomerTier.defaultDiscountCeiling`;
+otherwise zero, so an untiered customer cannot be discounted at all. Reported
+as `ceilingSource`. This per-category ceiling is what makes "hardware may go to
+15% but services only to 10%" work inside one quote, and `discountExcessPercent`
+per line is the input the blended risk score will aggregate.
+
+Seeded ceilings are derived from each category's **worst-margin** product — the
+largest discount that still leaves ~8% margin after the tier's price list is
+applied. Using the worst case rather than the average is what makes the ceiling
+a guarantee: no product can be sold below the floor while staying within its
+limit. `marginPercentAtCeiling` on every line makes that visible.
+
 ## Conventions
 
 - **Validation** — every handler runs its input through `validate(schema, body)`
@@ -74,6 +103,12 @@ rep's new accounts land on `Standard`.
   values from `common/constants/status.ts` instead of writing a literal.
 - **Lists** — use `parsePageParams(req.query)` + `paginated(rows, total, params)`
   from `common/utils/pagination.ts`.
+- **Audit** — the spec requires every approval, rejection and edit to be logged
+  with actor, timestamp and reason. Call `recordAudit()`
+  (`common/utils/audit.ts`) after the change commits; it never throws.
+- **Thresholds** — values the spec calls "configured" (stalled-deal days,
+  anomaly multiplier, approval risk threshold) live in `SystemSetting`. Read
+  them with `getNumericSetting()` (`common/utils/settings.ts`), never a literal.
 
 ## Environment
 
@@ -89,9 +124,10 @@ emitted to `src/generated/prisma` and is not committed.
 
 `npm run seed` loads a full demo dataset — roles, five users, three customer
 tiers, 38 products across six categories, a price list per tier, discount
-rules, three risk-banded approval policies, three warehouses with stock, upsell
-relationships and ten customers. Every write is an upsert on a natural key, so
-it is safe to re-run.
+rules, three risk-banded approval policies (auto / manager / manager+finance),
+three warehouses with stock, upsell relationships, three subscription plans,
+three promotions, tunable thresholds and ten customers. Every write is an
+upsert on a natural key, so it is safe to re-run.
 
 All demo users share the password `password123`:
 
@@ -99,6 +135,7 @@ All demo users share the password `password123`:
 | --- | --- |
 | `admin@dealflow360.com` | ADMIN, SALES_MANAGER |
 | `manager@dealflow360.com` | SALES_MANAGER, SALES_REP |
+| `finance@dealflow360.com` | FINANCE |
 | `rep@dealflow360.com` | SALES_REP |
 | `rep2@dealflow360.com` | SALES_REP |
 | `customer@dealflow360.com` | CUSTOMER |

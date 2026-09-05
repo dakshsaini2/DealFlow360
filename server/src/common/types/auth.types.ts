@@ -1,10 +1,13 @@
 /**
- * The four application roles. These strings are also what `ApprovalStep.role`
- * stores, so an approval policy can name an approver group directly.
+ * The five application roles. These strings are also what `ApprovalStep.role`
+ * stores, so an approval policy can name an approver group directly —
+ * `FINANCE` is the second-level approver for high-risk discounts and the role
+ * that owns fulfillment splits, backorders and billing reconciliation.
  */
 export const USER_ROLES = [
   "ADMIN",
   "SALES_MANAGER",
+  "FINANCE",
   "SALES_REP",
   "CUSTOMER",
 ] as const;

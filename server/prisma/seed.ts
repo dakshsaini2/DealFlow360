@@ -38,6 +38,7 @@ async function main() {
   const users = [
     { email: "admin@dealflow360.com", firstName: "Ada", lastName: "Admin", roles: ["ADMIN", "SALES_MANAGER"] },
     { email: "manager@dealflow360.com", firstName: "Maya", lastName: "Manager", roles: ["SALES_MANAGER", "SALES_REP"] },
+    { email: "finance@dealflow360.com", firstName: "Fern", lastName: "Diaz", roles: ["FINANCE"] },
     { email: "rep@dealflow360.com", firstName: "Riley", lastName: "Reyes", roles: ["SALES_REP"] },
     { email: "rep2@dealflow360.com", firstName: "Sam", lastName: "Okafor", roles: ["SALES_REP"] },
     { email: "customer@dealflow360.com", firstName: "Chris", lastName: "Chen", roles: ["CUSTOMER"] },
@@ -268,20 +269,42 @@ async function main() {
 
   /* ── Discount rules (tier x category ceilings) ──── */
 
-  const discountRules = [
-    { tier: "Standard", category: null, max: 10, priority: 0 },
-    { tier: "Premium", category: null, max: 20, priority: 0 },
-    { tier: "Enterprise", category: null, max: 35, priority: 0 },
-    // Hardware carries thin margins, so it is capped tighter than the tier default.
-    { tier: "Standard", category: "Hardware", max: 6, priority: 10 },
-    { tier: "Premium", category: "Hardware", max: 12, priority: 10 },
-    { tier: "Enterprise", category: "Hardware", max: 18, priority: 10 },
-    // Software and cloud have room to move.
-    { tier: "Premium", category: "Software Licenses", max: 25, priority: 10 },
-    { tier: "Enterprise", category: "Software Licenses", max: 40, priority: 10 },
-    { tier: "Enterprise", category: "Cloud Services", max: 30, priority: 10 },
-    { tier: "Premium", category: "Support Services", max: 15, priority: 10 },
-  ];
+  // Ceilings are derived from real margins rather than picked by feel: for each
+  // category we take its WORST-margin product and allow the largest discount
+  // that still leaves ~8% margin after the tier's price list has been applied.
+  // Using the worst case, not the average, is what makes the ceiling a real
+  // guarantee — no product in the category can be sold below the floor while
+  // staying inside its limit. Hardware is tightest because it is thinnest.
+  const categoryCeilings: Record<string, Record<string, number>> = {
+    Standard: {
+      Hardware: 17, Networking: 20, Peripherals: 21,
+      "Cloud Services": 38, "Software Licenses": 42, "Support Services": 35,
+    },
+    Premium: {
+      Hardware: 12, Networking: 15, Peripherals: 16,
+      "Cloud Services": 34, "Software Licenses": 38, "Support Services": 31,
+    },
+    Enterprise: {
+      Hardware: 6, Networking: 9, Peripherals: 11,
+      "Cloud Services": 30, "Software Licenses": 34, "Support Services": 27,
+    },
+  };
+
+  const discountRules: { tier: string; category: string | null; max: number; priority: number }[] = [];
+
+  for (const [tier, byCategory] of Object.entries(categoryCeilings)) {
+    // Tier-wide fallback for any category without its own rule.
+    discountRules.push({
+      tier,
+      category: null,
+      max: Math.min(...Object.values(byCategory)),
+      priority: 0,
+    });
+
+    for (const [category, max] of Object.entries(byCategory)) {
+      discountRules.push({ tier, category, max, priority: 10 });
+    }
+  }
 
   for (const rule of discountRules) {
     const customerTierId = tierByName.get(rule.tier)!;
@@ -326,11 +349,11 @@ async function main() {
       steps: ["SALES_MANAGER"],
     },
     {
-      name: "High Risk — Manager then Admin",
+      name: "High Risk — Manager then Finance",
       description: "Deep discount, thin margin, or a strategic account.",
       riskMin: 60,
       riskMax: 100,
-      steps: ["SALES_MANAGER", "ADMIN"],
+      steps: ["SALES_MANAGER", "FINANCE"],
     },
   ];
 
@@ -488,6 +511,120 @@ async function main() {
     });
   }
 
+  /* ── Subscription plans ─────────────────────────── */
+
+  // Hybrid billing needs recurring plans that attach to the service and cloud
+  // SKUs, so one order can mix a one-time server with a monthly support line.
+  const planSpecs = [
+    { name: "Monthly", billingInterval: "MONTH", intervalCount: 1, price: 0, cancellation: "Cancel any time, effective at period end.", refund: "Prorated credit note for the unused period." },
+    { name: "Quarterly", billingInterval: "MONTH", intervalCount: 3, price: 0, cancellation: "Cancel with 30 days notice.", refund: "Prorated credit note for the unused period." },
+    { name: "Annual", billingInterval: "YEAR", intervalCount: 1, price: 0, cancellation: "Cancel with 60 days notice.", refund: "Prorated credit note, less a 10% early-termination fee." },
+  ];
+
+  const planByName = new Map<string, string>();
+
+  for (const spec of planSpecs) {
+    const plan = await prisma.subscriptionPlan.upsert({
+      where: { name: spec.name },
+      update: {
+        billingInterval: spec.billingInterval,
+        intervalCount: spec.intervalCount,
+        cancellationPolicy: spec.cancellation,
+        refundPolicy: spec.refund,
+      },
+      create: {
+        name: spec.name,
+        billingInterval: spec.billingInterval,
+        intervalCount: spec.intervalCount,
+        price: spec.price,
+        currencyCode: CURRENCY,
+        prorationEnabled: true,
+        cancellationPolicy: spec.cancellation,
+        refundPolicy: spec.refund,
+      },
+    });
+
+    planByName.set(spec.name, plan.id);
+  }
+
+  // Which products may be sold as a recurring line.
+  const recurringSkus = [
+    "SV-SUP-BASIC", "SV-SUP-PREM", "CL-COMP-STD", "CL-STOR-TB",
+    "CL-BKP-ENT", "CL-DR-SITE", "CL-K8S-MGD", "SW-SEC-EP", "SW-OFF-BIZ",
+  ];
+
+  for (const sku of recurringSkus) {
+    for (const planName of ["Monthly", "Quarterly", "Annual"]) {
+      await prisma.productSubscriptionPlan.upsert({
+        where: {
+          productId_subscriptionPlanId: {
+            productId: productBySku.get(sku)!,
+            subscriptionPlanId: planByName.get(planName)!,
+          },
+        },
+        update: {},
+        create: {
+          productId: productBySku.get(sku)!,
+          subscriptionPlanId: planByName.get(planName)!,
+        },
+      });
+    }
+  }
+
+  /* ── Promotions ─────────────────────────────────── */
+
+  // Promoted products rank higher in the upsell panel (spec A6).
+  const promotionSpecs = [
+    { name: "Q3 Support Push", discountType: "PERCENT", discountValue: 10, skus: ["SV-SUP-PREM", "SV-SUP-BASIC"] },
+    { name: "Cloud Migration Bundle", discountType: "PERCENT", discountValue: 15, skus: ["CL-BKP-ENT", "CL-DR-SITE", "SV-MIG-DATA"] },
+    { name: "Peripheral Clearance", discountType: "PERCENT", discountValue: 20, skus: ["PR-MON-27", "PR-KB-MECH", "PR-HS-ANC"] },
+  ];
+
+  for (const spec of promotionSpecs) {
+    const promotion = await prisma.promotion.upsert({
+      where: { name: spec.name },
+      update: { discountValue: spec.discountValue, isActive: true },
+      create: {
+        name: spec.name,
+        description: `${spec.name} — ${spec.discountValue}% off`,
+        discountType: spec.discountType,
+        discountValue: spec.discountValue,
+        startAt: new Date("2026-01-01"),
+        endAt: new Date("2027-12-31"),
+      },
+    });
+
+    for (const sku of spec.skus) {
+      await prisma.promotionProduct.upsert({
+        where: {
+          promotionId_productId: {
+            promotionId: promotion.id,
+            productId: productBySku.get(sku)!,
+          },
+        },
+        update: {},
+        create: { promotionId: promotion.id, productId: productBySku.get(sku)! },
+      });
+    }
+  }
+
+  /* ── Tunable thresholds ─────────────────────────── */
+
+  const settings = [
+    { key: "STALLED_DEAL_DAYS", value: "7", description: "Days without activity before a quotation is flagged as stalled" },
+    { key: "DISCOUNT_ANOMALY_MULTIPLIER", value: "1.5", description: "Multiple of a rep's average discount that counts as an anomaly" },
+    { key: "APPROVAL_RISK_THRESHOLD", value: "25", description: "Blended risk score at or above which approval is required" },
+    { key: "QUOTE_VALIDITY_DAYS", value: "30", description: "Default validity window for a new quotation" },
+  ];
+
+  for (const setting of settings) {
+    await prisma.systemSetting.upsert({
+      where: { key: setting.key },
+      update: { description: setting.description },
+      create: setting,
+    });
+  }
+
   /* ── Customers ──────────────────────────────────── */
 
   const customerSpecs = [
@@ -535,6 +672,9 @@ Seed complete.
   policies     ${policySpecs.length}
   warehouses   ${warehouseSpecs.length}
   relations    ${relationships.length}
+  plans        ${planSpecs.length}
+  promotions   ${promotionSpecs.length}
+  settings     ${settings.length}
   customers    ${customerSpecs.length}
 
 Sign in as admin@dealflow360.com / ${DEMO_PASSWORD}`);

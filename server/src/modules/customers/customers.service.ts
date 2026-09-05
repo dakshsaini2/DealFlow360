@@ -41,7 +41,7 @@ const LIST_SELECT = {
  * per-rep view lives on the dashboard, not here.
  */
 function visibilityFilter(user: AuthUser) {
-  if (hasAnyRole(user, ["ADMIN", "SALES_MANAGER", "SALES_REP"])) {
+  if (hasAnyRole(user, ["ADMIN", "SALES_MANAGER", "FINANCE", "SALES_REP"])) {
     return {};
   }
 

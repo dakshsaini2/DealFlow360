@@ -9,7 +9,7 @@ import { round2, serialize } from "../../common/utils/serialize.js";
  * views can never drift apart.
  */
 function quotationScope(user: AuthUser) {
-  return hasAnyRole(user, ["ADMIN", "SALES_MANAGER"])
+  return hasAnyRole(user, ["ADMIN", "SALES_MANAGER", "FINANCE"])
     ? {}
     : { salesRepId: user.sub };
 }

@@ -29,12 +29,12 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { to: '/app', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/app/customers', label: 'Customers', icon: Users },
-  { to: '/app/products', label: 'Catalog', icon: Package, soon: true },
+  { to: '/app/products', label: 'Catalog', icon: Package },
   { to: '/app/quotations', label: 'Quotations', icon: FileText, soon: true },
-  { to: '/app/approvals', label: 'Approvals', icon: CheckCircle2, roles: ['ADMIN', 'SALES_MANAGER'], soon: true },
+  { to: '/app/approvals', label: 'Approvals', icon: CheckCircle2, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
   { to: '/app/orders', label: 'Orders', icon: ShoppingCart, soon: true },
-  { to: '/app/inventory', label: 'Inventory', icon: Boxes, soon: true },
-  { to: '/app/analytics', label: 'Analytics', icon: BarChart3, roles: ['ADMIN', 'SALES_MANAGER'], soon: true },
+  { to: '/app/inventory', label: 'Inventory', icon: Boxes, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
+  { to: '/app/analytics', label: 'Analytics', icon: BarChart3, roles: ['ADMIN', 'SALES_MANAGER', 'FINANCE'], soon: true },
 ];
 
 export default function AppShell() {

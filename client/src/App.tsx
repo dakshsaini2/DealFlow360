@@ -8,6 +8,8 @@ import Signup from './pages/auth/Signup'
 import Dashboard from './pages/app/Dashboard'
 import CustomersList from './pages/app/customers/CustomersList'
 import CustomerDetail from './pages/app/customers/CustomerDetail'
+import ProductsList from './pages/app/catalog/ProductsList'
+import ProductDetail from './pages/app/catalog/ProductDetail'
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="customers" element={<CustomersList />} />
               <Route path="customers/:id" element={<CustomerDetail />} />
+              <Route path="products" element={<ProductsList />} />
+              <Route path="products/:id" element={<ProductDetail />} />
             </Route>
           </Route>
         </Routes>

@@ -770,6 +770,11 @@ model Order {
   grandTotal    Decimal @default(0) @db.Decimal(14, 2)
   currencyCode  String  @db.VarChar(3)
 
+  /**
+   * What the customer was promised; slippage is measured against this.
+   */
+  promisedDeliveryDate DateTime?
+
   confirmedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -901,14 +906,16 @@ model ReplenishmentRule {
 // ============================================================
 
 model FulfillmentOrder {
-  id                     String   @id @default(uuid()) @db.Uuid
-  orderId                String   @db.Uuid
+  id                     String    @id @default(uuid()) @db.Uuid
+  orderId                String    @db.Uuid
   status                 String
   estimatedShipmentCount Int?
-  estimatedShippingCost  Decimal? @db.Decimal(14, 2)
-  actualShippingCost     Decimal? @db.Decimal(14, 2)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  estimatedShippingCost  Decimal?  @db.Decimal(14, 2)
+  actualShippingCost     Decimal?  @db.Decimal(14, 2)
+  expectedShipDate       DateTime?
+  shippedAt              DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   order       Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   allocations FulfillmentAllocation[]
@@ -1315,4 +1322,21 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([createdAt])
+}
+
+// ============================================================
+// 53. SYSTEM_SETTINGS
+// ============================================================
+
+/**
+ * Admin-tunable thresholds the business rules read at runtime — the number of
+ * idle days that makes a deal "stalled", the multiple of a rep's average
+ * discount that counts as an anomaly, and so on. Kept as text so a setting can
+ * hold a number, a flag or a short list without a migration per key.
+ */
+model SystemSetting {
+  key         String   @id
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
 }
