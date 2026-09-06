@@ -24,6 +24,7 @@ import {
   type InvoiceDetail as Invoice,
   type PaymentMethod,
 } from '../../../util/billing';
+import { maxLength, numeric, required, useValidation } from '../../../util/validation';
 
 export default function InvoiceDetail() {
   const { id } = useParams<{ id: string }>();
@@ -263,9 +264,18 @@ function PaymentDialog({
   const [method, setMethod] = useState<PaymentMethod>('BANK_TRANSFER');
   const [reference, setReference] = useState('');
   const [busy, setBusy] = useState(false);
+  // Overpaying is capped here rather than left to the server, which would only
+  // say the amount was invalid. The half-cent allowance absorbs the rounding
+  // the balance itself was formatted with.
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    amount: [
+      required('An amount'),
+      numeric({ min: 0.01, max: amountDue + 0.005, label: 'The amount' }),
+    ],
+    reference: [maxLength(120, 'A reference')],
+  });
 
   const value = Number(amount);
-  const valid = Number.isFinite(value) && value > 0 && value <= amountDue + 0.005;
 
   return (
     <Modal title="Record payment" onClose={onClose}>
@@ -277,7 +287,12 @@ function PaymentDialog({
           min={0}
           step={0.01}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          error={errors.amount}
+          onChange={(e) => {
+            clearError('amount');
+            setAmount(e.target.value);
+          }}
+          onBlur={() => validateField('amount', amount)}
           hint={`${currency.format(amountDue)} outstanding`}
         />
 
@@ -298,8 +313,15 @@ function PaymentDialog({
           id="payment-reference"
           label="Reference"
           value={reference}
-          onChange={(e) => setReference(e.target.value)}
+          error={errors.reference}
+          maxLength={120}
+          onChange={(e) => {
+            clearError('reference');
+            setReference(e.target.value);
+          }}
+          onBlur={() => validateField('reference', reference)}
           placeholder="Bank or transaction reference"
+          hint="Optional."
         />
 
         <div className="flex justify-end gap-2">
@@ -308,8 +330,9 @@ function PaymentDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={!valid}
             onClick={() => {
+              if (!validateAll({ amount, reference })) return;
+
               setBusy(true);
               onSubmit({
                 amount: value,

@@ -9,8 +9,10 @@ import {
   Modal,
   PageHeader,
   Spinner,
+  TextAreaField,
   TextField,
 } from '../../components/ui';
+import { firstError, maxLength, numeric, percent, required } from '../../util/validation';
 import { getApiErrorMessage } from '../../util/api';
 import { currency } from '../../util/catalog';
 import { planCadence } from '../../util/orders';
@@ -345,7 +347,15 @@ function PromptDialog({
   onSubmit: (text: string) => void;
 }) {
   const [text, setText] = useState('');
+  const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const textError = touched
+    ? firstError(
+        text,
+        optional ? [maxLength(1000, label)] : [required(label), maxLength(1000, label)],
+      )
+    : null;
 
   return (
     <Modal title={title} onClose={onClose}>
@@ -353,27 +363,36 @@ function PromptDialog({
         {description && (
           <p className="text-[13px] leading-relaxed text-slate-500">{description}</p>
         )}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="prompt-text" className="text-[13px] font-medium text-slate-700">
-            {label}
-          </label>
-          <textarea
-            id="prompt-text"
-            rows={3}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={placeholder}
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500"
-          />
-        </div>
+        <TextAreaField
+          id="prompt-text"
+          label={label}
+          rows={3}
+          maxLength={1000}
+          value={text}
+          error={textError ?? undefined}
+          onChange={(e) => {
+            setText(e.target.value);
+            if (touched) setTouched(false);
+          }}
+          onBlur={() => setTouched(true)}
+          placeholder={placeholder}
+        />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button
             loading={busy}
-            disabled={!optional && text.trim().length === 0}
+            disabled={(!optional && text.trim().length === 0) || text.length > 1000}
             onClick={() => {
+              const err = firstError(
+                text,
+                optional ? [maxLength(1000, label)] : [required(label), maxLength(1000, label)],
+              );
+              if (err) {
+                setTouched(true);
+                return;
+              }
               setBusy(true);
               onSubmit(text.trim());
             }}
@@ -398,7 +417,20 @@ function ChangeRequestDialog({
 }) {
   const [quantity, setQuantity] = useState(String(line.quantity));
   const [message, setMessage] = useState('');
+  const [qtyTouched, setQtyTouched] = useState(false);
+  const [msgTouched, setMsgTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const qtyError = qtyTouched
+    ? firstError(quantity, [
+        required('A quantity'),
+        numeric({ min: 1, max: 1_000_000, integer: true, label: 'The quantity' }),
+      ])
+    : null;
+
+  const msgError = msgTouched
+    ? firstError(message, [required('A message'), maxLength(1000, 'The message')])
+    : null;
 
   const next = Number(quantity);
   const changed = Number.isFinite(next) && next > 0 && next !== line.quantity;
@@ -412,22 +444,28 @@ function ChangeRequestDialog({
           type="number"
           min={1}
           value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
+          error={qtyError ?? undefined}
+          onChange={(e) => {
+            setQuantity(e.target.value);
+            if (qtyTouched) setQtyTouched(false);
+          }}
+          onBlur={() => setQtyTouched(true)}
           hint={`Currently ${line.quantity}. Leave as-is if the change is something else.`}
         />
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="request-message" className="text-[13px] font-medium text-slate-700">
-            What would you like changed?
-          </label>
-          <textarea
-            id="request-message"
-            rows={3}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Tell us what you need"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500"
-          />
-        </div>
+        <TextAreaField
+          id="request-message"
+          label="What would you like changed?"
+          rows={3}
+          maxLength={1000}
+          value={message}
+          error={msgError ?? undefined}
+          onChange={(e) => {
+            setMessage(e.target.value);
+            if (msgTouched) setMsgTouched(false);
+          }}
+          onBlur={() => setMsgTouched(true)}
+          placeholder="Tell us what you need"
+        />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
@@ -436,6 +474,20 @@ function ChangeRequestDialog({
             loading={busy}
             disabled={message.trim().length === 0}
             onClick={() => {
+              const qErr = firstError(quantity, [
+                required('A quantity'),
+                numeric({ min: 1, max: 1_000_000, integer: true, label: 'The quantity' }),
+              ]);
+              const mErr = firstError(message, [
+                required('A message'),
+                maxLength(1000, 'The message'),
+              ]);
+              if (qErr || mErr) {
+                setQtyTouched(true);
+                setMsgTouched(true);
+                return;
+              }
+
               setBusy(true);
               onSubmit(changed ? next : undefined, message.trim());
             }}
@@ -459,7 +511,14 @@ function CounterOfferDialog({
 }) {
   const [discount, setDiscount] = useState('');
   const [message, setMessage] = useState('');
+  const [discountTouched, setDiscountTouched] = useState(false);
+  const [messageTouched, setMessageTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  const discountError = discountTouched
+    ? firstError(discount, [required('A discount'), percent('The discount')])
+    : null;
+  const messageError = messageTouched ? firstError(message, [maxLength(1000, 'The note')]) : null;
 
   const value = Number(discount);
   const valid = Number.isFinite(value) && value >= 0 && value <= 100;
@@ -480,22 +539,28 @@ function CounterOfferDialog({
           max={100}
           step={0.5}
           value={discount}
-          onChange={(e) => setDiscount(e.target.value)}
+          error={discountError ?? undefined}
+          onChange={(e) => {
+            setDiscount(e.target.value);
+            if (discountTouched) setDiscountTouched(false);
+          }}
+          onBlur={() => setDiscountTouched(true)}
         />
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="counter-message" className="text-[13px] font-medium text-slate-700">
-            Why (optional)
-          </label>
-          <textarea
-            id="counter-message"
-            rows={3}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Budget, competing quote, volume commitment…"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500"
-          />
-        </div>
+        <TextAreaField
+          id="counter-message"
+          label="Why (optional)"
+          rows={3}
+          maxLength={1000}
+          value={message}
+          error={messageError ?? undefined}
+          onChange={(e) => {
+            setMessage(e.target.value);
+            if (messageTouched) setMessageTouched(false);
+          }}
+          onBlur={() => setMessageTouched(true)}
+          placeholder="Budget, competing quote, volume commitment…"
+        />
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -505,6 +570,17 @@ function CounterOfferDialog({
             loading={busy}
             disabled={!valid || discount === ''}
             onClick={() => {
+              const dErr = firstError(discount, [
+                required('A discount'),
+                percent('The discount'),
+              ]);
+              const mErr = firstError(message, [maxLength(1000, 'The note')]);
+              if (dErr || mErr) {
+                setDiscountTouched(true);
+                setMessageTouched(true);
+                return;
+              }
+
               setBusy(true);
               onSubmit(value, message.trim() || undefined);
             }}

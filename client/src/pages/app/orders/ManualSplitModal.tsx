@@ -1,8 +1,17 @@
 import { useMemo, useState } from 'react';
-import { Button, Modal } from '../../../components/ui';
+import { Button, Modal, TextAreaField } from '../../../components/ui';
 import type { AllocationPlan, WarehouseWithStock } from '../../../util/fulfillment';
+import { firstError, maxLength, numeric } from '../../../util/validation';
 
 type Draft = Record<string, Record<string, string>>;
+
+/**
+ * Each box is optional — blank means "nothing from here" — so `required` is
+ * deliberately absent. The server takes whole units only.
+ */
+const ALLOCATION_RULES = [
+  numeric({ min: 0, max: 1_000_000, integer: true, label: 'An allocation' }),
+];
 
 /**
  * Manual override of the suggested split. It opens pre-filled with what the
@@ -62,13 +71,21 @@ export default function ManualSplitModal({
     return initial;
   });
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   function set(orderLineId: string, warehouseId: string, value: string) {
+    setError('');
     setDraft((current) => ({
       ...current,
       [orderLineId]: { ...(current[orderLineId] ?? {}), [warehouseId]: value },
     }));
+  }
+
+  /** The typed figure for one box, or null while it is usable. */
+  function cellError(orderLineId: string, warehouseId: string) {
+    return firstError(draft[orderLineId]?.[warehouseId] ?? '', ALLOCATION_RULES);
   }
 
   const allocations = lines.flatMap((line) =>
@@ -81,8 +98,35 @@ export default function ManualSplitModal({
     }),
   );
 
+  function handleSubmit() {
+    const badCell = lines
+      .flatMap((line) => warehouses.map((warehouse) => cellError(line.orderLineId, warehouse.id)))
+      .find((message) => message !== null);
+
+    if (badCell) {
+      setError(badCell);
+      return;
+    }
+
+    const badReason = firstError(reason, [maxLength(400, 'A reason')]);
+
+    if (badReason) {
+      setReasonError(badReason);
+      return;
+    }
+
+    if (allocations.length === 0) {
+      setError('Source at least one unit, or cancel to keep the suggested split.');
+      return;
+    }
+
+    setError('');
+    setBusy(true);
+    onSubmit(allocations, reason.trim() || undefined);
+  }
+
   return (
-    <Modal title="Manual warehouse split" onClose={onClose}>
+    <Modal title="Manual warehouse split" onClose={onClose} width="lg">
       <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto p-5">
         <p className="text-[13px] leading-relaxed text-slate-500">
           Set how much comes from each warehouse. Anything you leave unsourced becomes a
@@ -102,6 +146,7 @@ export default function ManualSplitModal({
               {warehouses.map((warehouse) => {
                 const stock = warehouse.stock.find((row) => row.product.sku === line.sku);
                 const inputId = `alloc-${line.orderLineId}-${warehouse.id}`;
+                const invalid = cellError(line.orderLineId, warehouse.id);
 
                 return (
                   <div key={warehouse.id} className="flex flex-col gap-1">
@@ -112,14 +157,31 @@ export default function ManualSplitModal({
                       id={inputId}
                       type="number"
                       min={0}
+                      step={1}
+                      aria-invalid={invalid ? true : undefined}
+                      aria-describedby={invalid ? `${inputId}-error` : undefined}
                       value={draft[line.orderLineId]?.[warehouse.id] ?? ''}
                       onChange={(e) => set(line.orderLineId, warehouse.id, e.target.value)}
                       placeholder="0"
-                      className="w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[13px] outline-none focus:border-brand-500"
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-[13px] outline-none ${
+                        invalid
+                          ? 'border-red-300 focus:border-red-500'
+                          : 'border-slate-200 focus:border-brand-500'
+                      }`}
                     />
-                    <span className="text-[11px] text-slate-400">
-                      {stock ? `${stock.available} free` : 'no stock row'}
-                    </span>
+                    {invalid ? (
+                      <span
+                        id={`${inputId}-error`}
+                        role="alert"
+                        className="text-[11px] font-medium text-red-600"
+                      >
+                        {invalid}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">
+                        {stock ? `${stock.available} free` : 'no stock row'}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -127,31 +189,33 @@ export default function ManualSplitModal({
           </div>
         ))}
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="override-reason" className="text-[13px] font-medium text-slate-700">
-            Reason
-          </label>
-          <input
-            id="override-reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Why is the suggested split being overridden?"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] outline-none placeholder:text-slate-400 focus:border-brand-500"
-          />
-        </div>
+        <TextAreaField
+          id="override-reason"
+          label="Reason"
+          rows={2}
+          maxLength={400}
+          value={reason}
+          error={reasonError}
+          onChange={(e) => {
+            setReasonError('');
+            setReason(e.target.value);
+          }}
+          onBlur={() => setReasonError(firstError(reason, [maxLength(400, 'A reason')]) ?? '')}
+          placeholder="Why is the suggested split being overridden?"
+          hint="Optional. It is kept with the allocation record."
+        />
+
+        {error && (
+          <p role="alert" className="text-[12px] font-medium text-red-600">
+            {error}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            loading={busy}
-            disabled={allocations.length === 0}
-            onClick={() => {
-              setBusy(true);
-              onSubmit(allocations, reason.trim() || undefined);
-            }}
-          >
+          <Button loading={busy} onClick={handleSubmit}>
             Apply split
           </Button>
         </div>

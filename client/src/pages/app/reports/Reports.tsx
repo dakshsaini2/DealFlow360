@@ -50,8 +50,15 @@ export default function Reports() {
     ...(categoryId ? { categoryId } : {}),
   };
 
+  const dateRangeError =
+    period === 'custom' && Boolean(from && to && from > to)
+      ? 'Start date must be before or on end date.'
+      : null;
+
   const load = useCallback(
     (signal: AbortSignal) => {
+      if (dateRangeError) return;
+
       fetchSalesReport(params, signal)
         .then((result) => {
           setReport(result);
@@ -63,15 +70,16 @@ export default function Reports() {
         });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [period, from, to, salesRepId, approvalStatus, categoryId],
+    [period, from, to, salesRepId, approvalStatus, categoryId, dateRangeError],
   );
 
   useEffect(() => {
+    if (dateRangeError) return;
     const controller = new AbortController();
     load(controller.signal);
 
     return () => controller.abort();
-  }, [load]);
+  }, [load, dateRangeError]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -137,22 +145,32 @@ export default function Reports() {
         </select>
 
         {period === 'custom' && (
-          <>
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               aria-label="From date"
-              className={selectClasses}
+              className={`${selectClasses} ${
+                dateRangeError ? 'border-red-300 focus:border-red-500' : ''
+              }`}
             />
+            <span className="text-[13px] text-slate-400">to</span>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               aria-label="To date"
-              className={selectClasses}
+              className={`${selectClasses} ${
+                dateRangeError ? 'border-red-300 focus:border-red-500' : ''
+              }`}
             />
-          </>
+            {dateRangeError && (
+              <span role="alert" className="text-[12px] font-medium text-red-600">
+                {dateRangeError}
+              </span>
+            )}
+          </div>
         )}
 
         <select

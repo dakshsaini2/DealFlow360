@@ -30,11 +30,28 @@ import {
   type QuoteLine,
 } from '../../../util/quotations';
 import { confirmQuotation } from '../../../util/orders';
+import {
+  firstError,
+  notPast,
+  numeric,
+  percent,
+  required,
+  useValidation,
+} from '../../../util/validation';
 import AddLineModal from './AddLineModal';
 import ApprovalPanel from './ApprovalPanel';
 import NegotiationPanel from './NegotiationPanel';
 import RecommendationsPanel from './RecommendationsPanel';
 import RiskPanel from './RiskPanel';
+
+/** Mirrors the line schema: a positive whole number, capped where the API caps it. */
+const QUANTITY_RULES = [
+  required('A quantity'),
+  numeric({ min: 1, max: 1_000_000, integer: true, label: 'The quantity' }),
+];
+
+/** Both the per-line and the apply-to-all discount take the same 0–100. */
+const DISCOUNT_RULES = [required('A discount'), percent('A discount')];
 
 export default function QuotationBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -46,6 +63,7 @@ export default function QuotationBuilder() {
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const [orderDiscount, setOrderDiscount] = useState('');
+  const [discountError, setDiscountError] = useState('');
   // Any cart change re-ranks the suggestions, since what is already in the
   // cart both seeds and filters them.
   const [cartVersion, setCartVersion] = useState(0);
@@ -175,28 +193,59 @@ export default function QuotationBuilder() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
               <h2 className="text-[15px] font-semibold text-slate-900">Lines</h2>
               {editable && quotation.lines.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <label htmlFor="order-discount" className="text-[12px] text-slate-500">
-                    Discount all lines
-                  </label>
-                  <input
-                    id="order-discount"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={0.5}
-                    value={orderDiscount}
-                    onChange={(e) => setOrderDiscount(e.target.value)}
-                    placeholder="%"
-                    className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-[13px] outline-none focus:border-brand-500"
-                  />
-                  <Button
-                    variant="secondary"
-                    disabled={busy || orderDiscount === ''}
-                    onClick={() => run(() => applyOrderDiscount(id, Number(orderDiscount)))}
-                  >
-                    Apply
-                  </Button>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="order-discount" className="text-[12px] text-slate-500">
+                      Discount all lines
+                    </label>
+                    <input
+                      id="order-discount"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={orderDiscount}
+                      onChange={(e) => {
+                        setDiscountError('');
+                        setOrderDiscount(e.target.value);
+                      }}
+                      onBlur={() => setDiscountError(firstError(orderDiscount, DISCOUNT_RULES) ?? '')}
+                      aria-invalid={discountError ? true : undefined}
+                      aria-describedby={discountError ? 'order-discount-error' : undefined}
+                      placeholder="%"
+                      className={`w-20 rounded-lg border px-2 py-1.5 text-center text-[13px] outline-none ${
+                        discountError
+                          ? 'border-red-300 focus:border-red-500'
+                          : 'border-slate-200 focus:border-brand-500'
+                      }`}
+                    />
+                    <Button
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => {
+                        const invalid = firstError(orderDiscount, DISCOUNT_RULES);
+
+                        if (invalid) {
+                          setDiscountError(invalid);
+                          return;
+                        }
+
+                        setDiscountError('');
+                        run(() => applyOrderDiscount(id, Number(orderDiscount)));
+                      }}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                  {discountError && (
+                    <p
+                      id="order-discount-error"
+                      role="alert"
+                      className="text-[12px] font-medium text-red-600"
+                    >
+                      {discountError}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -367,6 +416,12 @@ function ConfirmOrderDialog({
 }) {
   const [date, setDate] = useState('');
   const [busy, setBusy] = useState(false);
+  // The date is optional, so `notPast` alone is the whole rule — it passes an
+  // empty value through. A promise already in the past would only ever be
+  // measured as slippage, so it is worth catching before the order exists.
+  const { errors, validateField, validateAll, clearError } = useValidation<'date'>({
+    date: [notPast('A promised delivery date')],
+  });
 
   return (
     <Modal title={`Confirm ${quoteNumber}`} onClose={onClose}>
@@ -380,7 +435,12 @@ function ConfirmOrderDialog({
           label="Promised delivery date"
           type="date"
           value={date}
-          onChange={(e) => setDate(e.target.value)}
+          onChange={(e) => {
+            clearError('date');
+            setDate(e.target.value);
+          }}
+          onBlur={() => validateField('date', date)}
+          error={errors.date}
           hint="Optional. Delivery slippage is measured against this date."
         />
         <div className="flex justify-end gap-2">
@@ -390,6 +450,8 @@ function ConfirmOrderDialog({
           <Button
             loading={busy}
             onClick={() => {
+              if (!validateAll({ date })) return;
+
               setBusy(true);
               onConfirm(date ? new Date(date).toISOString() : undefined);
             }}
@@ -423,9 +485,20 @@ function LineRow({
   // Local copies so typing stays responsive; the server is called on blur.
   const [quantity, setQuantity] = useState(String(line.quantity));
   const [discount, setDiscount] = useState(String(line.discountPercent));
+  // A rejected entry is called out rather than silently reverted, so a typo
+  // does not look like the change quietly went through.
+  const [quantityError, setQuantityError] = useState('');
+  const [discountError, setDiscountError] = useState('');
 
-  useEffect(() => setQuantity(String(line.quantity)), [line.quantity]);
-  useEffect(() => setDiscount(String(line.discountPercent)), [line.discountPercent]);
+  useEffect(() => {
+    setQuantity(String(line.quantity));
+    setQuantityError('');
+  }, [line.quantity]);
+
+  useEffect(() => {
+    setDiscount(String(line.discountPercent));
+    setDiscountError('');
+  }, [line.discountPercent]);
 
   const over = (line.discountExcessPercent ?? 0) > 0;
   const cellInput =
@@ -444,20 +517,38 @@ function LineRow({
       </td>
       <td className="px-3 py-3 text-center">
         {editable ? (
-          <input
-            type="number"
-            min={1}
-            aria-label={`Quantity for ${line.product.sku}`}
-            value={quantity}
-            disabled={busy}
-            onChange={(e) => setQuantity(e.target.value)}
-            onBlur={() => {
-              const next = Number(quantity);
-              if (next > 0 && next !== line.quantity) onChange({ quantity: next });
-              else setQuantity(String(line.quantity));
-            }}
-            className={`${cellInput} border-slate-200`}
-          />
+          <div className="inline-flex flex-col items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              aria-label={`Quantity for ${line.product.sku}`}
+              aria-invalid={quantityError ? true : undefined}
+              value={quantity}
+              disabled={busy}
+              onChange={(e) => {
+                setQuantityError('');
+                setQuantity(e.target.value);
+              }}
+              onBlur={() => {
+                const invalid = firstError(quantity, QUANTITY_RULES);
+
+                if (invalid) {
+                  setQuantityError(invalid);
+                  return;
+                }
+
+                const next = Number(quantity);
+                if (next !== line.quantity) onChange({ quantity: next });
+              }}
+              className={`${cellInput} ${quantityError ? 'border-red-300' : 'border-slate-200'}`}
+            />
+            {quantityError && (
+              <p role="alert" className="max-w-28 text-[11px] font-medium text-red-600">
+                {quantityError}
+              </p>
+            )}
+          </div>
         ) : (
           <span className="text-[13px] text-slate-700">{line.quantity}</span>
         )}
@@ -467,25 +558,45 @@ function LineRow({
       </td>
       <td className="px-3 py-3 text-center">
         {editable ? (
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.5}
-            aria-label={`Discount for ${line.product.sku}`}
-            value={discount}
-            disabled={busy}
-            onChange={(e) => setDiscount(e.target.value)}
-            onBlur={() => {
-              const next = Number(discount);
-              if (next >= 0 && next <= 100 && next !== line.discountPercent) {
-                onChange({ discountPercent: next });
-              } else if (next !== line.discountPercent) {
-                setDiscount(String(line.discountPercent));
-              }
-            }}
-            className={`${cellInput} ${over ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800' : 'border-slate-200'}`}
-          />
+          <div className="inline-flex flex-col items-center gap-1">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.5}
+              aria-label={`Discount for ${line.product.sku}`}
+              aria-invalid={discountError ? true : undefined}
+              value={discount}
+              disabled={busy}
+              onChange={(e) => {
+                setDiscountError('');
+                setDiscount(e.target.value);
+              }}
+              onBlur={() => {
+                const invalid = firstError(discount, DISCOUNT_RULES);
+
+                if (invalid) {
+                  setDiscountError(invalid);
+                  return;
+                }
+
+                const next = Number(discount);
+                if (next !== line.discountPercent) onChange({ discountPercent: next });
+              }}
+              className={`${cellInput} ${
+                discountError
+                  ? 'border-red-300'
+                  : over
+                    ? 'border-amber-400 bg-amber-50 font-semibold text-amber-800'
+                    : 'border-slate-200'
+              }`}
+            />
+            {discountError && (
+              <p role="alert" className="max-w-28 text-[11px] font-medium text-red-600">
+                {discountError}
+              </p>
+            )}
+          </div>
         ) : (
           <span className="text-[13px] text-slate-700">{line.discountPercent}%</span>
         )}

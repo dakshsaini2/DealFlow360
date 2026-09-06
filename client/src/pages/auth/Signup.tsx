@@ -5,8 +5,15 @@ import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, PasswordField, SubmitButton } from '../../components/auth/AuthForm';
 import { getApiErrorMessage, homeForUser } from '../../util/api';
 import { useAuth } from '../../hooks/useAuth';
-
-const MIN_PASSWORD_LENGTH = 8;
+import {
+  MIN_PASSWORD_LENGTH,
+  email as emailRule,
+  maxLength,
+  newPassword,
+  personName,
+  required,
+  useValidation,
+} from '../../util/validation';
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -19,21 +26,24 @@ export default function Signup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Declared inline so the confirmation rule can close over `password` — the
+  // hook re-reads the rule set on every call, so it always sees the latest.
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    firstName: [required('A first name'), personName('A first name'), maxLength(100, 'A first name')],
+    lastName: [required('A last name'), personName('A last name'), maxLength(100, 'A last name')],
+    email: [required('An email address'), emailRule()],
+    password: [required('A password'), newPassword()],
+    confirmPassword: [
+      required('The confirmation'),
+      (value: string) => (value === password ? null : 'Both passwords must match.'),
+    ],
+  });
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
 
-    if (!firstName.trim() || !lastName.trim()) {
-      return setError('Please enter your first and last name.');
-    }
-
-    if (password.length < MIN_PASSWORD_LENGTH) {
-      return setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
-    }
-
-    if (password !== confirmPassword) {
-      return setError('Passwords do not match.');
-    }
+    if (!validateAll({ firstName, lastName, email, password, confirmPassword })) return;
 
     setLoading(true);
 
@@ -83,7 +93,12 @@ export default function Signup() {
             autoComplete="given-name"
             placeholder="Ada"
             value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
+            onChange={(e) => {
+              clearError('firstName');
+              setFirstName(e.target.value);
+            }}
+            onBlur={() => validateField('firstName', firstName)}
+            error={errors.firstName}
             disabled={loading}
             required
           />
@@ -97,7 +112,12 @@ export default function Signup() {
             autoComplete="family-name"
             placeholder="Lovelace"
             value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
+            onChange={(e) => {
+              clearError('lastName');
+              setLastName(e.target.value);
+            }}
+            onBlur={() => validateField('lastName', lastName)}
+            error={errors.lastName}
             disabled={loading}
             required
           />
@@ -112,7 +132,12 @@ export default function Signup() {
           autoComplete="email"
           placeholder="you@firm.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            clearError('email');
+            setEmail(e.target.value);
+          }}
+          onBlur={() => validateField('email', email)}
+          error={errors.email}
           disabled={loading}
           required
         />
@@ -124,9 +149,14 @@ export default function Signup() {
           name="password"
           autoComplete="new-password"
           placeholder="••••••••"
-          hint={`At least ${MIN_PASSWORD_LENGTH} characters.`}
+          hint={`At least ${MIN_PASSWORD_LENGTH} characters, with a letter and a number.`}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            clearError('password');
+            setPassword(e.target.value);
+          }}
+          onBlur={() => validateField('password', password)}
+          error={errors.password}
           disabled={loading}
           required
         />
@@ -139,7 +169,12 @@ export default function Signup() {
           autoComplete="new-password"
           placeholder="••••••••"
           value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
+          onChange={(e) => {
+            clearError('confirmPassword');
+            setConfirmPassword(e.target.value);
+          }}
+          onBlur={() => validateField('confirmPassword', confirmPassword)}
+          error={errors.confirmPassword}
           disabled={loading}
           required
         />

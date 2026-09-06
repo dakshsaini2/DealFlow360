@@ -9,8 +9,10 @@ import {
   Modal,
   PageHeader,
   Spinner,
+  TextAreaField,
 } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
+import { maxLength, required, useValidation } from '../../../util/validation';
 import { currency } from '../../../util/catalog';
 import { tierTone } from '../../../util/customers';
 import { humanStatus } from '../../../util/quotations';
@@ -345,23 +347,30 @@ function CancelDialog({
 }) {
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // `cancelOrderSchema` requires the reason and caps it at 400.
+  const { errors, validateField, validateAll, clearError } = useValidation<'reason'>({
+    reason: [required('A reason'), maxLength(400, 'A reason')],
+  });
 
   return (
-    <Modal title={`Cancel ${orderNumber}`} onClose={onClose}>
+    <Modal title={`Cancel ${orderNumber}`} onClose={onClose} width="lg">
       <div className="flex flex-col gap-4 p-5">
         <p className="text-[13px] leading-relaxed text-slate-500">
           Cancelling releases the order from fulfillment. The reason is written to the audit trail.
         </p>
-        <label htmlFor="cancel-reason" className="text-[13px] font-medium text-slate-700">
-          Reason
-        </label>
-        <textarea
+        <TextAreaField
           id="cancel-reason"
+          label="Reason"
           rows={3}
+          maxLength={400}
           value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          error={errors.reason}
+          onChange={(e) => {
+            clearError('reason');
+            setReason(e.target.value);
+          }}
+          onBlur={() => validateField('reason', reason)}
           placeholder="Why is this order being cancelled?"
-          className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500"
         />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -370,8 +379,9 @@ function CancelDialog({
           <Button
             variant="danger"
             loading={busy}
-            disabled={reason.trim().length === 0}
             onClick={() => {
+              if (!validateAll({ reason })) return;
+
               setBusy(true);
               onConfirm(reason.trim());
             }}

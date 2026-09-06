@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarClock, Repeat, TrendingDown, TrendingUp } from 'lucide-react';
-import { Badge, Button, Card, ErrorBanner, Modal, TextField } from '../../../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorBanner,
+  Modal,
+  TextAreaField,
+  TextField,
+} from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
+import { maxLength, numeric, required, useValidation } from '../../../util/validation';
 import { currency } from '../../../util/catalog';
 import { humanStatus } from '../../../util/quotations';
 import { planCadence } from '../../../util/orders';
@@ -345,6 +354,18 @@ function ChangeQuantityDialog({
   const [quantity, setQuantity] = useState(String(line.quantity));
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // Declared inline so the "must actually differ" rule can see the current
+  // line — applying a change to the same number would only raise an empty
+  // proration event.
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    quantity: [
+      required('A quantity'),
+      numeric({ min: 1, max: 1_000_000, integer: true, label: 'The quantity' }),
+      (value: string) =>
+        Number(value) === line.quantity ? 'That is already the current quantity.' : null,
+    ],
+    reason: [maxLength(400, 'A reason')],
+  });
 
   const next = Number(quantity);
   const periodEnd = new Date(line.currentPeriodEnd);
@@ -377,8 +398,14 @@ function ChangeQuantityDialog({
           label="New quantity"
           type="number"
           min={1}
+          step={1}
           value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
+          error={errors.quantity}
+          onChange={(e) => {
+            clearError('quantity');
+            setQuantity(e.target.value);
+          }}
+          onBlur={() => validateField('quantity', quantity)}
           hint={`Currently ${line.quantity}`}
         />
 
@@ -399,12 +426,20 @@ function ChangeQuantityDialog({
           </p>
         </div>
 
-        <TextField
+        <TextAreaField
           id="sub-reason"
           label="Reason"
+          rows={2}
+          maxLength={400}
           value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          error={errors.reason}
+          onChange={(e) => {
+            clearError('reason');
+            setReason(e.target.value);
+          }}
+          onBlur={() => validateField('reason', reason)}
           placeholder="Why is the quantity changing?"
+          hint="Optional. It is recorded on the proration event."
         />
 
         <div className="flex justify-end gap-2">
@@ -413,8 +448,9 @@ function ChangeQuantityDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={!Number.isFinite(next) || next <= 0 || next === line.quantity}
             onClick={() => {
+              if (!validateAll({ quantity, reason })) return;
+
               setBusy(true);
               onSubmit(next, reason.trim() || undefined);
             }}
@@ -437,9 +473,13 @@ function CancelSubscriptionDialog({
   const [atPeriodEnd, setAtPeriodEnd] = useState(true);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // `cancelSubscriptionSchema` requires the reason and caps it at 400.
+  const { errors, validateField, validateAll, clearError } = useValidation<'reason'>({
+    reason: [required('A reason'), maxLength(400, 'A reason')],
+  });
 
   return (
-    <Modal title="Cancel subscription" onClose={onClose}>
+    <Modal title="Cancel subscription" onClose={onClose} width="lg">
       <div className="flex flex-col gap-4 p-5">
         <fieldset className="flex flex-col gap-2 border-none p-0">
           <legend className="mb-1 text-[13px] font-medium text-slate-700">When</legend>
@@ -477,11 +517,18 @@ function CancelSubscriptionDialog({
           </label>
         </fieldset>
 
-        <TextField
+        <TextAreaField
           id="cancel-sub-reason"
           label="Reason"
+          rows={3}
+          maxLength={400}
           value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          error={errors.reason}
+          onChange={(e) => {
+            clearError('reason');
+            setReason(e.target.value);
+          }}
+          onBlur={() => validateField('reason', reason)}
           placeholder="Why is the customer cancelling?"
         />
 
@@ -492,8 +539,9 @@ function CancelSubscriptionDialog({
           <Button
             variant="danger"
             loading={busy}
-            disabled={reason.trim().length === 0}
             onClick={() => {
+              if (!validateAll({ reason })) return;
+
               setBusy(true);
               onSubmit(atPeriodEnd, reason.trim());
             }}

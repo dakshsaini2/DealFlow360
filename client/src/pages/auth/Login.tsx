@@ -5,6 +5,19 @@ import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, PasswordField, SubmitButton } from '../../components/auth/AuthForm';
 import { getApiErrorMessage, homeForUser } from '../../util/api';
 import { useAuth } from '../../hooks/useAuth';
+import { email as emailRule, required, useValidation } from '../../util/validation';
+
+/**
+ * Sign-in only checks the shape of the address and that a password was typed.
+ * Password *strength* rules belong on signup and reset — applying them here
+ * would lock out an older account whose password predates them.
+ */
+const RULES = {
+  email: [required('An email address'), emailRule()],
+  password: [required('A password')],
+};
+
+type FieldName = keyof typeof RULES;
 
 export default function Login() {
   const navigate = useNavigate();
@@ -17,10 +30,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation<FieldName>(RULES);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+
+    if (!validateAll({ email, password })) return;
+
     setLoading(true);
 
     try {
@@ -69,7 +86,12 @@ export default function Login() {
           autoComplete="email"
           placeholder="you@firm.com"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            clearError('email');
+            setEmail(e.target.value);
+          }}
+          onBlur={() => validateField('email', email)}
+          error={errors.email}
           disabled={loading}
           required
         />
@@ -83,7 +105,12 @@ export default function Login() {
             autoComplete="current-password"
             placeholder="••••••••"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              clearError('password');
+              setPassword(e.target.value);
+            }}
+            onBlur={() => validateField('password', password)}
+            error={errors.password}
             disabled={loading}
             required
           />

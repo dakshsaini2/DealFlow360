@@ -9,6 +9,13 @@ import {
   revokePortalInvite,
   type PortalAccess,
 } from '../../../util/invites';
+import {
+  email as emailRule,
+  maxLength,
+  personName,
+  required,
+  useValidation,
+} from '../../../util/validation';
 
 /**
  * Who can see this account in the customer portal.
@@ -197,6 +204,13 @@ export default function PortalAccessPanel({ customerId }: { customerId: string }
   );
 }
 
+/** Mirrors `portalInviteSchema` on the server. */
+const INVITE_RULES = {
+  firstName: [required('A first name'), personName('A first name'), maxLength(60, 'A first name')],
+  lastName: [required('A last name'), personName('A last name'), maxLength(60, 'A last name')],
+  email: [required('An email address'), emailRule()],
+};
+
 function InviteDialog({
   customerName,
   onClose,
@@ -210,8 +224,19 @@ function InviteDialog({
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [busy, setBusy] = useState(false);
+  const { errors, validateField, validateAll, clearError } =
+    useValidation<keyof typeof INVITE_RULES>(INVITE_RULES);
 
-  const valid = email.includes('@') && firstName.trim() && lastName.trim();
+  function submit() {
+    if (!validateAll({ email, firstName, lastName })) return;
+
+    setBusy(true);
+    onSubmit({
+      email: email.trim().toLowerCase(),
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+    });
+  }
 
   return (
     <Modal title={`Invite a contact at ${customerName}`} onClose={onClose}>
@@ -225,39 +250,44 @@ function InviteDialog({
             id="invite-first"
             label="First name"
             value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
+            onChange={(e) => {
+              clearError('firstName');
+              setFirstName(e.target.value);
+            }}
+            onBlur={() => validateField('firstName', firstName)}
+            error={errors.firstName}
           />
           <TextField
             id="invite-last"
             label="Last name"
             value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
+            onChange={(e) => {
+              clearError('lastName');
+              setLastName(e.target.value);
+            }}
+            onBlur={() => validateField('lastName', lastName)}
+            error={errors.lastName}
           />
         </div>
         <TextField
           id="invite-email"
           label="Work email"
           type="email"
+          inputMode="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => {
+            clearError('email');
+            setEmail(e.target.value);
+          }}
+          onBlur={() => validateField('email', email)}
+          error={errors.email}
           placeholder="procurement@customer.example"
         />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            loading={busy}
-            disabled={!valid}
-            onClick={() => {
-              setBusy(true);
-              onSubmit({
-                email: email.trim().toLowerCase(),
-                firstName: firstName.trim(),
-                lastName: lastName.trim(),
-              });
-            }}
-          >
+          <Button loading={busy} onClick={submit}>
             Create invitation
           </Button>
         </div>

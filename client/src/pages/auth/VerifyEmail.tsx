@@ -6,6 +6,12 @@ import { FormError, SubmitButton } from '../../components/auth/AuthForm';
 import { getApiErrorMessage, homeForUser } from '../../util/api';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchOutbox, resendVerification, verifyEmail } from '../../util/account';
+import { pattern, required, useValidation } from '../../util/validation';
+
+/** The server accepts exactly six digits, so nothing shorter is worth a round trip. */
+const RULES = {
+  code: [required('The code'), pattern(/^\d{6}$/, 'Enter the six-digit code from the email.')],
+};
 
 /**
  * Where a new signup confirms their address.
@@ -24,6 +30,7 @@ export default function VerifyEmail() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [devCode, setDevCode] = useState<string | null>(null);
+  const { errors, validateField, validateAll, clearError } = useValidation<'code'>(RULES);
 
   // With no SMTP configured the server captures mail instead of sending it, so
   // the code is surfaced here rather than leaving the flow unwalkable.
@@ -51,6 +58,9 @@ export default function VerifyEmail() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+
+    if (!validateAll({ code })) return;
+
     setLoading(true);
 
     try {
@@ -85,7 +95,7 @@ export default function VerifyEmail() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         {error && <FormError message={error} />}
 
         {notice && (
@@ -111,10 +121,25 @@ export default function VerifyEmail() {
             autoComplete="one-time-code"
             maxLength={6}
             value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+            onChange={(e) => {
+              clearError('code');
+              setCode(e.target.value.replace(/\D/g, ''));
+            }}
+            onBlur={() => validateField('code', code)}
+            aria-invalid={errors.code ? true : undefined}
+            aria-describedby={errors.code ? 'otp-error' : undefined}
             placeholder="000000"
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-center font-mono text-[24px] tracking-[0.4em] text-slate-900 outline-none placeholder:text-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+            className={`w-full rounded-xl border bg-white px-4 py-3 text-center font-mono text-[24px] tracking-[0.4em] text-slate-900 outline-none placeholder:text-slate-300 ${
+              errors.code
+                ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10'
+                : 'border-slate-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10'
+            }`}
           />
+          {errors.code && (
+            <p id="otp-error" role="alert" className="text-[12px] font-medium text-red-600">
+              {errors.code}
+            </p>
+          )}
         </div>
 
         <SubmitButton loading={loading}>Verify my email</SubmitButton>
@@ -129,6 +154,7 @@ export default function VerifyEmail() {
                 const result = await resendVerification(email);
                 setNotice(result.message);
                 setCode('');
+                clearError('code');
               } catch (err) {
                 setError(getApiErrorMessage(err, 'Could not send another code.'));
               }

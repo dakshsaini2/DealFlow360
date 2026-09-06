@@ -27,6 +27,7 @@ import {
   type QuotationSummary,
 } from '../../../util/quotations';
 import type { PageMeta } from '../../../util/customers';
+import { required, useValidation } from '../../../util/validation';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -282,6 +283,9 @@ function NewQuotationModal({ onClose }: { onClose: () => void }) {
   const [customerId, setCustomerId] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const { errors, validateAll, clearError } = useValidation<'customerId'>({
+    customerId: [required('A customer')],
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -304,10 +308,11 @@ function NewQuotationModal({ onClose }: { onClose: () => void }) {
   }, []);
 
   async function handleCreate() {
-    if (!customerId) return;
+    setError('');
+
+    if (!validateAll({ customerId })) return;
 
     setSaving(true);
-    setError('');
 
     try {
       const result = await createQuotation({ customerId });
@@ -327,10 +332,15 @@ function NewQuotationModal({ onClose }: { onClose: () => void }) {
           id="new-quote-customer"
           label="Customer"
           value={customerId}
-          onChange={(e) => setCustomerId(e.target.value)}
+          onChange={(e) => {
+            clearError('customerId');
+            setCustomerId(e.target.value);
+          }}
+          error={errors.customerId}
           disabled={saving}
           hint="Their tier sets the price list and the discount ceilings on every line."
         >
+          <option value="">Choose a customer…</option>
           {customers.map((customer) => (
             <option key={customer.id} value={customer.id}>
               {customer.name} — {customer.customerTier?.name ?? 'no tier'}
@@ -342,7 +352,7 @@ function NewQuotationModal({ onClose }: { onClose: () => void }) {
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} loading={saving} disabled={!customerId}>
+          <Button onClick={handleCreate} loading={saving}>
             Create draft
           </Button>
         </div>

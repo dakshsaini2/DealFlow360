@@ -6,6 +6,12 @@ import { Field, FormError, PasswordField, SubmitButton } from '../../components/
 import { Spinner } from '../../components/ui';
 import { getApiErrorMessage, setStoredUser, setToken } from '../../util/api';
 import { acceptInvite, fetchInvite, type InviteDetails } from '../../util/invites';
+import {
+  MIN_PASSWORD_LENGTH,
+  newPassword,
+  required,
+  useValidation,
+} from '../../util/validation';
 
 /**
  * Where an invited customer lands.
@@ -24,6 +30,13 @@ export default function AcceptInvite() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    password: [required('A password'), newPassword()],
+    confirm: [
+      required('The confirmation'),
+      (value: string) => (value === password ? null : 'Both passwords must match.'),
+    ],
+  });
 
   useEffect(() => {
     if (!token) return;
@@ -44,13 +57,10 @@ export default function AcceptInvite() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (password !== confirm) {
-      setError('Those passwords do not match.');
-      return;
-    }
-
     setError('');
+
+    if (!validateAll({ password, confirm })) return;
+
     setLoading(true);
 
     try {
@@ -115,7 +125,7 @@ export default function AcceptInvite() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
         {error && <FormError message={error} />}
 
         <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
@@ -145,11 +155,16 @@ export default function AcceptInvite() {
           label="Choose a password"
           icon={Lock}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="At least 8 characters"
+          onChange={(e) => {
+            clearError('password');
+            setPassword(e.target.value);
+          }}
+          onBlur={() => validateField('password', password)}
+          error={errors.password}
+          hint={`At least ${MIN_PASSWORD_LENGTH} characters, with a letter and a number.`}
+          placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
           autoComplete="new-password"
           required
-          minLength={8}
         />
 
         <PasswordField
@@ -157,11 +172,15 @@ export default function AcceptInvite() {
           label="Confirm password"
           icon={Lock}
           value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
+          onChange={(e) => {
+            clearError('confirm');
+            setConfirm(e.target.value);
+          }}
+          onBlur={() => validateField('confirm', confirm)}
+          error={errors.confirm}
           placeholder="Type it again"
           autoComplete="new-password"
           required
-          minLength={8}
         />
 
         <SubmitButton loading={loading}>Activate my access</SubmitButton>

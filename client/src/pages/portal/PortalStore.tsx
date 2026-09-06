@@ -11,7 +11,9 @@ import {
   Modal,
   PageHeader,
   Spinner,
+  TextAreaField,
 } from '../../components/ui';
+import { firstError, maxLength } from '../../util/validation';
 import { getApiErrorMessage } from '../../util/api';
 import { currency } from '../../util/catalog';
 import { planCadence } from '../../util/orders';
@@ -474,19 +476,16 @@ function RequestDialog({
           </span>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="request-note" className="text-[13px] font-medium text-slate-700">
-            Anything we should know? (optional)
-          </label>
-          <textarea
-            id="request-note"
-            rows={3}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="Timing, budget, volumes you are considering…"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] text-slate-800 outline-none placeholder:text-slate-400 focus:border-brand-500"
-          />
-        </div>
+        <TextAreaField
+          id="request-note"
+          label="Anything we should know? (optional)"
+          rows={3}
+          maxLength={1000}
+          value={message}
+          error={firstError(message, [maxLength(1000, 'The note')]) ?? undefined}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="Timing, budget, volumes you are considering…"
+        />
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -494,8 +493,9 @@ function RequestDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || message.length > 1000}
             onClick={() => {
+              if (message.length > 1000) return;
               setBusy(true);
               onSubmit(message.trim());
             }}

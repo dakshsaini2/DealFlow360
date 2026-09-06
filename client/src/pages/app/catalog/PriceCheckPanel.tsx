@@ -11,8 +11,16 @@ import {
   type PricedLine,
   type ProductDetail,
 } from '../../../util/catalog';
+import { firstError, numeric, percent, required } from '../../../util/validation';
 
 const DEBOUNCE_MS = 250;
+
+/** The same bounds the pricing endpoint accepts per line. */
+const QUANTITY_RULES = [
+  required('A quantity'),
+  numeric({ min: 1, max: 1_000_000, integer: true, label: 'The quantity' }),
+];
+const DISCOUNT_RULES = [required('A discount'), percent('The discount')];
 
 /**
  * Runs one product through the real pricing engine for a chosen customer, so a
@@ -48,11 +56,14 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
     return () => controller.abort();
   }, []);
 
-  const request = useMemo(() => {
-    const qty = Number(quantity);
-    const disc = Number(discount);
+  const quantityError = firstError(quantity, QUANTITY_RULES);
+  const discountError = firstError(discount, DISCOUNT_RULES);
 
-    if (!customerId || !Number.isFinite(qty) || qty <= 0) return null;
+  // Nothing is priced until both figures are usable. The discount used to be
+  // clamped into range instead, which quietly priced a line the rep had not
+  // asked for.
+  const request = useMemo(() => {
+    if (!customerId || quantityError || discountError) return null;
 
     return {
       customerId,
@@ -60,12 +71,12 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
         {
           productId: product.id,
           ...(variantId ? { variantId } : {}),
-          quantity: qty,
-          discountPercent: Number.isFinite(disc) ? Math.min(Math.max(disc, 0), 100) : 0,
+          quantity: Number(quantity),
+          discountPercent: Number(discount),
         },
       ],
     };
-  }, [customerId, product.id, variantId, quantity, discount]);
+  }, [customerId, product.id, variantId, quantity, discount, quantityError, discountError]);
 
   useEffect(() => {
     if (!request) {
@@ -139,6 +150,7 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
             type="number"
             min={1}
             value={quantity}
+            error={quantityError ?? undefined}
             onChange={(e) => setQuantity(e.target.value)}
           />
           <TextField
@@ -149,6 +161,7 @@ export default function PriceCheckPanel({ product }: { product: ProductDetail })
             max={100}
             step={0.5}
             value={discount}
+            error={discountError ?? undefined}
             onChange={(e) => setDiscount(e.target.value)}
           />
         </div>
