@@ -271,3 +271,132 @@ export async function submitPortalRequest(input: {
 
   return data.request;
 }
+
+/* ── the customer's orders ──────────────────────────── */
+
+/** Internal fulfillment states collapsed into "where is my order". */
+export type DeliveryState = { label: string; detail: string };
+
+export type PortalOrderSummary = {
+  id: string;
+  orderNumber: string;
+  currencyCode: string;
+  grandTotal: number;
+  promisedDeliveryDate: string | null;
+  confirmedAt: string | null;
+  createdAt: string;
+  customer: { id: string; name: string };
+  quotation: { id: string; quoteNumber: string } | null;
+  _count: { lines: number };
+  delivery: DeliveryState;
+  /** Still to pay across this order's invoices. */
+  amountDue: number;
+};
+
+export type PortalOrderLine = {
+  id: string;
+  description: string | null;
+  quantity: number;
+  unitPrice: number;
+  discountPercent: number;
+  discountAmount: number;
+  taxAmount: number;
+  lineTotal: number;
+  lineType: 'ONE_TIME' | 'RECURRING';
+  product: { id: string; sku: string; name: string; unit: string; category: { name: string } };
+  variant: { sku: string; name: string } | null;
+  subscriptionPlan: SubscriptionPlanRef | null;
+};
+
+export type PortalInvoice = {
+  id: string;
+  invoiceNumber: string;
+  invoiceType: 'ONE_TIME' | 'RECURRING';
+  status: string;
+  grandTotal: number;
+  amountPaid: number;
+  amountDue: number;
+  issuedAt: string;
+  dueAt: string | null;
+};
+
+export type PortalOrderResponse = {
+  order: {
+    id: string;
+    orderNumber: string;
+    currencyCode: string;
+    subtotal: number;
+    discountTotal: number;
+    taxTotal: number;
+    grandTotal: number;
+    promisedDeliveryDate: string | null;
+    confirmedAt: string | null;
+    createdAt: string;
+    customer: {
+      id: string;
+      name: string;
+      shippingAddress: string | null;
+      billingAddress: string | null;
+    };
+    quotation: { id: string; quoteNumber: string } | null;
+    contact: string;
+    lines: PortalOrderLine[];
+    invoices: PortalInvoice[];
+    subscriptions: {
+      id: string;
+      status: string;
+      nextBillingDate: string;
+      lines: {
+        id: string;
+        quantity: number;
+        unitPrice: number;
+        discountPercent: number;
+        status: string;
+        product: { sku: string; name: string };
+        subscriptionPlan: { name: string; billingInterval: string; intervalCount: number };
+      }[];
+    }[];
+  };
+  delivery: DeliveryState & {
+    shippedAt: string | null;
+    expectedShipDate: string | null;
+    awaitingStock: {
+      sku: string;
+      name: string;
+      quantity: number;
+      expectedRestockDate: string | null;
+    }[];
+  };
+  billing: {
+    oneTimeLines: number;
+    recurringLines: number;
+    oneTimeTotal: number;
+    recurringTotal: number;
+    totalDue: number;
+  };
+};
+
+export async function fetchPortalOrders(page = 1, signal?: AbortSignal) {
+  const { data } = await api.get<{ data: PortalOrderSummary[]; meta: PageMeta }>(
+    '/portal/orders',
+    { params: { page }, signal },
+  );
+
+  return data;
+}
+
+export async function fetchPortalOrder(id: string, signal?: AbortSignal) {
+  const { data } = await api.get<PortalOrderResponse>(`/portal/orders/${id}`, { signal });
+
+  return data;
+}
+
+/** The delivery label carries its own tone. */
+export function deliveryTone(label: string): 'neutral' | 'brand' | 'green' | 'amber' | 'red' {
+  if (label === 'Delivered') return 'green';
+  if (label === 'On its way') return 'brand';
+  if (label === 'Partially shipped' || label === 'Partly awaiting stock') return 'amber';
+  if (label === 'Cancelled') return 'red';
+
+  return 'neutral';
+}

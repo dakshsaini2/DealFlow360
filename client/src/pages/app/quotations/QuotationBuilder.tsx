@@ -403,6 +403,30 @@ function ConfirmOrderDialog({
   );
 }
 
+/**
+ * Volume ladder: a bigger order earns a bigger break. Changing a line's
+ * quantity re-derives its discount from this table instead of leaving the old
+ * percent behind on a very different order size.
+ */
+const VOLUME_DISCOUNTS = [
+  { minQuantity: 100, discountPercent: 15 },
+  { minQuantity: 50, discountPercent: 10 },
+  { minQuantity: 25, discountPercent: 7.5 },
+  { minQuantity: 10, discountPercent: 5 },
+];
+
+/**
+ * Capped at the line's own ceiling so simply ordering more never silently
+ * pushes the quote into approval; a rep who wants to go past it still types
+ * the discount by hand.
+ */
+function volumeDiscountFor(quantity: number, ceiling: number | null) {
+  const tier = VOLUME_DISCOUNTS.find((entry) => quantity >= entry.minQuantity);
+  const percent = tier?.discountPercent ?? 0;
+
+  return ceiling === null ? percent : Math.min(percent, ceiling);
+}
+
 function LineRow({
   line,
   editable,
@@ -453,8 +477,19 @@ function LineRow({
             onChange={(e) => setQuantity(e.target.value)}
             onBlur={() => {
               const next = Number(quantity);
-              if (next > 0 && next !== line.quantity) onChange({ quantity: next });
-              else setQuantity(String(line.quantity));
+              if (next <= 0 || next === line.quantity) {
+                setQuantity(String(line.quantity));
+                return;
+              }
+
+              // Quantity and discount travel together so the line is repriced
+              // once; a hand-typed discount holds until the quantity moves.
+              const volume = volumeDiscountFor(next, line.allowedDiscountPercent);
+              onChange(
+                volume === line.discountPercent
+                  ? { quantity: next }
+                  : { quantity: next, discountPercent: volume },
+              );
             }}
             className={`${cellInput} border-slate-200`}
           />

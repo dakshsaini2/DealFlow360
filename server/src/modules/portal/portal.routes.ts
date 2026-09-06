@@ -36,6 +36,11 @@ portalRouter.get("/products", controller.browse);
 portalRouter.get("/categories", controller.categories);
 portalRouter.post("/requests", controller.submitRequest);
 
+/* ── their orders ─────────────────────────────────── */
+
+portalRouter.get("/orders", controller.orders);
+portalRouter.get("/orders/:id", controller.orderDetail);
+
 /* ── their quotations ─────────────────────────────── */
 
 portalRouter.get("/quotations", controller.list);

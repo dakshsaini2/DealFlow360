@@ -43,6 +43,20 @@ export const env = {
   appUrl: process.env.APP_URL ?? "http://localhost:5173",
 
   /**
+   * Browser origins allowed to call the API, comma-separated. Behind the
+   * container's reverse proxy the client is same-origin and this is never
+   * consulted; it matters when the two are served separately, as in `npm run
+   * dev`.
+   */
+  corsOrigins: (process.env.CORS_ORIGINS ?? "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+
+  /** Runs pending migrations and the demo seed at boot. Used by the container. */
+  autoMigrate: process.env.AUTO_MIGRATE === "true",
+
+  /**
    * SMTP is optional. With no host configured the mailer falls back to a
    * development outbox that logs each message instead of sending it, so the
    * whole verification and invitation flow works without credentials.

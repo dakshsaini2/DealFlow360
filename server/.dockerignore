@@ -1,0 +1,7 @@
+node_modules
+dist
+.env
+.env.*
+*.log
+# Regenerated inside the image for the target platform.
+src/generated

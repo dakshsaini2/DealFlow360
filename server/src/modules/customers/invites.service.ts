@@ -404,9 +404,12 @@ export async function acceptInvite(token: string, input: AcceptInviteInput) {
     // Accepting is a sign-in — the caller is handed a session — so it counts
     // as one. Without this the rep's portal-access panel would report a
     // contact who is actively using the portal as "never signed in".
+    //
+    // It also proves the address: the link was emailed there and nothing else
+    // could have opened it, which is exactly what a verification code proves.
     await tx.user.update({
       where: { id: account.id },
-      data: { lastLoginAt: new Date() },
+      data: { lastLoginAt: new Date(), emailVerifiedAt: new Date() },
     });
 
     // Single use: marking it accepted inside the transaction means two
@@ -437,12 +440,16 @@ export async function acceptInvite(token: string, input: AcceptInviteInput) {
 
   return {
     token: signToken({ sub: user.id, email: user.email, roles: roleNames }),
+    // Same shape `login` and `signup` return, so the client stores a complete
+    // user rather than one missing `emailVerified` — which would read as
+    // unverified and bounce them to the code screen.
     user: {
       id: user.id,
       email: user.email,
       firstName: user.firstName,
       lastName: user.lastName,
       roles: roleNames,
+      emailVerified: true,
     },
   };
 }

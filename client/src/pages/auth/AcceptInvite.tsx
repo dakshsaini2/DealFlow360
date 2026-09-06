@@ -4,7 +4,8 @@ import { Building2, Lock, Mail } from 'lucide-react';
 import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, PasswordField, SubmitButton } from '../../components/auth/AuthForm';
 import { Spinner } from '../../components/ui';
-import { getApiErrorMessage, setStoredUser, setToken } from '../../util/api';
+import { clearAuth, getApiErrorMessage, setStoredUser, setToken } from '../../util/api';
+import { useAuth } from '../../hooks/useAuth';
 import { acceptInvite, fetchInvite, type InviteDetails } from '../../util/invites';
 
 /**
@@ -17,6 +18,7 @@ import { acceptInvite, fetchInvite, type InviteDetails } from '../../util/invite
  */
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
+  const { user } = useAuth();
 
   const [invite, setInvite] = useState<InviteDetails | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -56,7 +58,10 @@ export default function AcceptInvite() {
     try {
       const result = await acceptInvite(token!, password);
 
-      // Accepting returns a session, so store it and go straight through.
+      // Accepting hands back a session for the *invited* person. Anyone else
+      // signed in on this browser is being replaced, so drop their session
+      // explicitly rather than letting one overwrite the other.
+      clearAuth();
       setToken(result.token);
       setStoredUser(result.user);
       // A full navigation lets AuthProvider re-read the stored session rather
@@ -117,6 +122,14 @@ export default function AcceptInvite() {
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         {error && <FormError message={error} />}
+
+        {/* Usually the rep who sent it, testing the link on their own machine. */}
+        {user && user.email !== invite.email && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-[12px] leading-relaxed text-amber-800">
+            You are signed in as <strong>{user.email}</strong>. Setting a password here signs you
+            out and activates access for {invite.email} instead.
+          </p>
+        )}
 
         <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3">
           <Building2 size={16} className="shrink-0 text-slate-400" />
