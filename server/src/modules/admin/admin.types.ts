@@ -3,6 +3,22 @@ import { SETTING_DEFAULTS } from "../../common/utils/settings.js";
 
 export const idParamSchema = z.object({ id: z.uuid("must be a valid id") });
 
+/* ── product master ───────────────────────────────── */
+
+export const createProductSchema = z.object({
+  /** Uppercased here so a lowercase entry cannot slip past the unique check. */
+  sku: z.string().trim().min(2).max(40).toUpperCase(),
+  name: z.string().trim().min(2).max(160),
+  categoryId: z.uuid(),
+  description: z.string().trim().max(1000).optional(),
+  productType: z.enum(["GOODS", "SERVICE"]).default("GOODS"),
+  basePrice: z.coerce.number().min(0).max(10_000_000),
+  /** Optional: a product with no cost carries no margin the engines can read. */
+  costPrice: z.coerce.number().min(0).max(10_000_000).optional(),
+  unit: z.string().trim().min(1).max(20).default("unit"),
+  taxRate: z.coerce.number().min(0).max(100).default(0),
+});
+
 /* ── warehouses & stock (spec A4) ─────────────────── */
 
 export const createWarehouseSchema = z.object({
@@ -102,6 +118,7 @@ export const updateSettingsSchema = z.object({
     .max(20),
 });
 
+export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type CreateWarehouseInput = z.infer<typeof createWarehouseSchema>;
 export type UpdateWarehouseInput = z.infer<typeof updateWarehouseSchema>;
 export type SetStockInput = z.infer<typeof setStockSchema>;

@@ -15,9 +15,16 @@ export const adminRouter = Router();
 adminRouter.use(requireAuth);
 adminRouter.use(requireRole("ADMIN", "SALES_MANAGER"));
 
+/**
+ * Admin only, unlike the rest of this router: a sales manager tunes the terms a
+ * product is sold on, but does not decide what the catalogue contains.
+ */
+adminRouter.post("/products", requireRole("ADMIN"), controller.createProduct);
+
 adminRouter.get("/warehouses", controller.listWarehouses);
 adminRouter.post("/warehouses", controller.createWarehouse);
 adminRouter.patch("/warehouses/:id", controller.updateWarehouse);
+adminRouter.get("/warehouses/:id/stock", controller.listStock);
 adminRouter.put("/warehouses/:id/stock", controller.setStock);
 
 adminRouter.get("/subscription-plans", controller.listPlans);

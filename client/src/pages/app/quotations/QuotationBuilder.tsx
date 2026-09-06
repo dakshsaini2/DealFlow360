@@ -465,6 +465,72 @@ function ConfirmOrderDialog({
   );
 }
 
+/**
+ * Volume ladder: a bigger order earns a bigger break. Only used for lines we
+ * have no cost price for, where the margin-share rule below has nothing to
+ * work from. Ordered high to low, since `find` takes the first tier cleared.
+ */
+const VOLUME_DISCOUNTS = [
+  { minQuantity: 100, discountPercent: 15 },
+  { minQuantity: 50, discountPercent: 10 },
+  { minQuantity: 25, discountPercent: 7.5 },
+  { minQuantity: 10, discountPercent: 5 },
+];
+
+/** Every unit hands back half a point of the line's margin... */
+const MARGIN_SHARE_PER_UNIT = 0.5;
+/** ...and no quantity ever hands back more than half of it. */
+const MAX_MARGIN_SHARE_PERCENT = 50;
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/**
+ * Margin at list price, not at the price the line is already discounted to.
+ * `line.marginPercent` is measured after the current discount, so feeding it
+ * back in would shrink the break a little more on every quantity change.
+ */
+function listMarginPercent(line: QuoteLine) {
+  if (line.costPrice === null || line.unitPrice <= 0) return null;
+
+  return ((line.unitPrice - line.costPrice) / line.unitPrice) * 100;
+}
+
+/** The slice of margin a quantity earns: half a point each, capped at half. */
+function marginSharePercent(quantity: number) {
+  return Math.min(quantity * MARGIN_SHARE_PER_UNIT, MAX_MARGIN_SHARE_PERCENT);
+}
+
+/**
+ * What the quantity earns on its own, before any ceiling. A line we know the
+ * cost of gives away a share of its own margin — 40% margin at 30 units is
+ * 40 x 15% = 6% off list — so the break stays proportional to the room the
+ * product actually has, and a thin-margin product is never discounted like a
+ * fat one. Lines with no cost price fall back to the flat ladder above.
+ */
+function earnedDiscountFor(line: QuoteLine, quantity: number) {
+  const margin = listMarginPercent(line);
+
+  if (margin === null) {
+    return VOLUME_DISCOUNTS.find((tier) => quantity >= tier.minQuantity)?.discountPercent ?? 0;
+  }
+
+  return (margin * marginSharePercent(quantity)) / 100;
+}
+
+/**
+ * Capped at the line's own ceiling so simply ordering more never silently
+ * pushes the quote into approval; a rep who wants to go past it still types
+ * the discount by hand.
+ */
+function volumeDiscountFor(line: QuoteLine, quantity: number) {
+  if (!Number.isFinite(quantity) || quantity <= 0) return 0;
+
+  const earned = Math.max(0, earnedDiscountFor(line, quantity));
+  const ceiling = line.allowedDiscountPercent;
+
+  return round2(ceiling === null ? earned : Math.min(earned, ceiling));
+}
+
 function LineRow({
   line,
   editable,

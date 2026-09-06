@@ -28,6 +28,8 @@ import Backend from './pages/app/admin/Backend'
 import PortalLayout from './pages/portal/PortalLayout'
 import PortalQuotations from './pages/portal/PortalQuotations'
 import PortalStore from './pages/portal/PortalStore'
+import PortalOrders from './pages/portal/PortalOrders'
+import PortalOrder from './pages/portal/PortalOrder'
 import PortalQuotation from './pages/portal/PortalQuotation'
 
 function App() {
@@ -44,16 +46,21 @@ function App() {
           <Route element={<PublicOnlyRoute />}>
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
-            <Route path="/invite/:token" element={<AcceptInvite />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password/:token" element={<ResetPassword />} />
           </Route>
 
           {/*
-            Verification is reached *while signed in* — a new signup already has
-            a session — so it sits outside the signed-out-only guard.
+            These two are reached *with* a session as often as without, so they
+            sit outside the signed-out-only guard:
+
+            - verification: a new signup already has one;
+            - an invitation: it is addressed to a named person, and whoever
+              happens to be logged in on that browser is usually the rep who
+              sent it. Bouncing them to /app would make the link look broken.
           */}
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/invite/:token" element={<AcceptInvite />} />
 
 
           {/*
@@ -70,6 +77,8 @@ function App() {
               <Route index element={<PortalStore />} />
               <Route path="quotations" element={<PortalQuotations />} />
               <Route path="quotations/:id" element={<PortalQuotation />} />
+              <Route path="orders" element={<PortalOrders />} />
+              <Route path="orders/:id" element={<PortalOrder />} />
             </Route>
           </Route>
 

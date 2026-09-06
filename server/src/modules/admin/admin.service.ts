@@ -5,6 +5,10 @@ import { recordAudit } from "../../common/utils/audit.js";
 import { prisma } from "../../common/utils/prisma.js";
 import { round2, serialize } from "../../common/utils/serialize.js";
 import {
+  PRODUCT_LIST_SELECT,
+  toProductListItem,
+} from "../catalog/catalog.service.js";
+import {
   SETTING_DEFAULTS,
   getAllSettings,
   setSetting,
@@ -12,6 +16,7 @@ import {
 } from "../../common/utils/settings.js";
 import type {
   CreatePlanInput,
+  CreateProductInput,
   CreateTierInput,
   CreateWarehouseInput,
   PlanProductsInput,
@@ -31,6 +36,61 @@ import type {
  * tier/category ceilings are what every quote line is checked against. Changing
  * one here changes behaviour everywhere, which is why every write is audited.
  */
+
+/* ── product master ───────────────────────────────── */
+
+/**
+ * Adds a product to the catalogue. Cost price is what makes the rest of the
+ * platform work — margin, the volume break and the risk score all read it — so
+ * it is offered here rather than left for a later edit.
+ */
+export async function createProduct(user: AuthUser, input: CreateProductInput) {
+  const [existing, category] = await Promise.all([
+    prisma.product.findUnique({
+      where: { sku: input.sku },
+      select: { id: true },
+    }),
+    prisma.category.findUnique({
+      where: { id: input.categoryId },
+      select: { id: true },
+    }),
+  ]);
+
+  if (existing) {
+    throw new ValidationError("A product with that SKU already exists", [
+      "sku: must be unique",
+    ]);
+  }
+
+  if (!category) {
+    throw new NotFoundError("Category not found");
+  }
+
+  const product = await prisma.product.create({
+    data: {
+      sku: input.sku,
+      name: input.name,
+      categoryId: input.categoryId,
+      description: input.description ?? null,
+      productType: input.productType,
+      basePrice: input.basePrice,
+      costPrice: input.costPrice ?? null,
+      unit: input.unit,
+      taxRate: input.taxRate,
+    },
+    select: PRODUCT_LIST_SELECT,
+  });
+
+  await recordAudit({
+    actorUserId: user.sub,
+    action: AUDIT_ACTION.CREATE,
+    entityType: "Product",
+    entityId: product.id,
+    newValues: input,
+  });
+
+  return { product: toProductListItem(product) };
+}
 
 /* ── warehouses & stock (A4) ──────────────────────── */
 
@@ -120,6 +180,60 @@ export async function updateWarehouse(
   });
 
   return { warehouse: serialize(warehouse) };
+}
+
+/**
+ * What one warehouse actually holds. Reserved quantity is what the fulfillment
+ * engine has already promised to orders, so `available` — not on-hand — is the
+ * number that decides whether the next order can be filled from here.
+ */
+export async function listWarehouseStock(warehouseId: string) {
+  const warehouse = await prisma.warehouse.findUnique({
+    where: { id: warehouseId },
+    select: { id: true },
+  });
+
+  if (!warehouse) {
+    throw new NotFoundError("Warehouse not found");
+  }
+
+  const rows = await prisma.inventory.findMany({
+    where: { warehouseId },
+    orderBy: [{ product: { name: "asc" } }, { variantId: "asc" }],
+    select: {
+      id: true,
+      onHandQuantity: true,
+      reservedQuantity: true,
+      reorderLevel: true,
+      reorderQuantity: true,
+      updatedAt: true,
+      product: { select: { id: true, sku: true, name: true, unit: true } },
+      variant: { select: { id: true, sku: true, name: true } },
+    },
+  });
+
+  return {
+    data: rows.map((row) => {
+      const onHand = round2(Number(row.onHandQuantity));
+      const reserved = round2(Number(row.reservedQuantity));
+      const reorderLevel = round2(Number(row.reorderLevel));
+      const available = round2(Math.max(0, onHand - reserved));
+
+      return {
+        id: row.id,
+        product: row.product,
+        variant: row.variant,
+        onHand,
+        reserved,
+        available,
+        reorderLevel,
+        reorderQuantity: round2(Number(row.reorderQuantity)),
+        /** Free stock has fallen to the level that should trigger a reorder. */
+        belowReorderLevel: reorderLevel > 0 && available <= reorderLevel,
+        updatedAt: row.updatedAt.toISOString(),
+      };
+    }),
+  };
 }
 
 /**

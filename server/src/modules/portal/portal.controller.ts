@@ -4,6 +4,7 @@ import { parsePageParams } from "../../common/utils/pagination.js";
 import { validate } from "../../common/utils/validate.js";
 import { confirmQuotation } from "../orders/orders.service.js";
 import * as service from "./portal.service.js";
+import * as portalOrders from "./orders.service.js";
 import * as storefront from "./storefront.service.js";
 import {
   changeRequestSchema,
@@ -127,6 +128,26 @@ export async function submitRequest(req: Request, res: Response, next: NextFunct
     const input = validate(submitRequestSchema, req.body);
 
     res.status(201).json(await storefront.submitRequest(currentUser(req), input));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ── the customer's own orders ────────────────────── */
+
+export async function orders(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await portalOrders.listOrders(currentUser(req), parsePageParams(req.query)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function orderDetail(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { id } = validate(idParamSchema, req.params);
+
+    res.json(await portalOrders.getOrder(currentUser(req), id));
   } catch (err) {
     next(err);
   }

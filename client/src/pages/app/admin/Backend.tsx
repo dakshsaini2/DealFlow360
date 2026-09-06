@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Percent, Plus, Repeat, Save, SlidersHorizontal, Warehouse } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import axios from 'axios';
+import {
+  ChevronDown,
+  ChevronRight,
+  Percent,
+  Plus,
+  Repeat,
+  Save,
+  SlidersHorizontal,
+  Warehouse,
+} from 'lucide-react';
 import {
   Badge,
   Button,
@@ -25,6 +35,7 @@ import {
   fetchAdminWarehouses,
   fetchGovernance,
   fetchSettings,
+  fetchWarehouseStock,
   setStock,
   updateSettings,
   updateTier,
@@ -32,6 +43,7 @@ import {
   upsertDiscountRule,
   type AdminPlan,
   type AdminSetting,
+  type AdminStockRow,
   type AdminWarehouse,
   type Governance,
 } from '../../../util/admin';
@@ -120,6 +132,10 @@ function Warehouses({ onError, onNotice }: PanelProps) {
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [creating, setCreating] = useState(false);
   const [stocking, setStocking] = useState<AdminWarehouse | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  // Bumped after a stock write so the open panel refetches instead of showing
+  // the numbers it loaded before the change.
+  const [stockVersion, setStockVersion] = useState(0);
 
   const load = useCallback(() => {
     fetchAdminWarehouses()
@@ -168,7 +184,8 @@ function Warehouses({ onError, onNotice }: PanelProps) {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {warehouses.map((warehouse) => (
-                <tr key={warehouse.id}>
+                <Fragment key={warehouse.id}>
+                <tr>
                   <td className="px-5 py-3 text-[13px] font-semibold text-slate-900">
                     {warehouse.code}
                   </td>
@@ -178,8 +195,26 @@ function Warehouses({ onError, onNotice }: PanelProps) {
                       <p className="text-[11px] text-slate-400">{warehouse.address}</p>
                     )}
                   </td>
-                  <td className="px-3 py-3 text-center text-[13px] text-slate-600">
-                    {warehouse._count.inventory}
+                  <td className="px-3 py-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpanded((current) =>
+                          current === warehouse.id ? null : warehouse.id,
+                        )
+                      }
+                      disabled={warehouse._count.inventory === 0}
+                      aria-expanded={expanded === warehouse.id}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-lg border-none bg-transparent px-2 py-1 text-[13px] text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-default disabled:text-slate-300 disabled:hover:bg-transparent"
+                    >
+                      {warehouse._count.inventory > 0 &&
+                        (expanded === warehouse.id ? (
+                          <ChevronDown size={14} />
+                        ) : (
+                          <ChevronRight size={14} />
+                        ))}
+                      {warehouse._count.inventory}
+                    </button>
                   </td>
                   <td className="px-3 py-3 text-center">
                     <WeightField
@@ -204,6 +239,18 @@ function Warehouses({ onError, onNotice }: PanelProps) {
                     </Button>
                   </td>
                 </tr>
+                {expanded === warehouse.id && (
+                  <tr>
+                    <td colSpan={6} className="bg-slate-50/60 px-5 py-4">
+                      <StockTable
+                        key={`${warehouse.id}-${stockVersion}`}
+                        warehouse={warehouse}
+                        onError={onError}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -241,6 +288,8 @@ function Warehouses({ onError, onNotice }: PanelProps) {
               onNotice(
                 `${target.code} now holds ${stock.onHandQuantity} (${stock.available} free).`,
               );
+              setExpanded(target.id);
+              setStockVersion((version) => version + 1);
               load();
             } catch (err) {
               onError(getApiErrorMessage(err, 'That stock level could not be set.'));
@@ -249,6 +298,87 @@ function Warehouses({ onError, onNotice }: PanelProps) {
         />
       )}
     </>
+  );
+}
+
+/**
+ * The stock a warehouse holds, opened from its SKU count. On-hand is what is
+ * physically there; reserved is what orders have already claimed, so the free
+ * column is the one that answers "can we ship from here".
+ */
+function StockTable({
+  warehouse,
+  onError,
+}: {
+  warehouse: AdminWarehouse;
+  onError: (message: string) => void;
+}) {
+  const [rows, setRows] = useState<AdminStockRow[] | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchWarehouseStock(warehouse.id, controller.signal)
+      .then(setRows)
+      .catch((err) => {
+        if (axios.isCancel(err)) return;
+        onError(getApiErrorMessage(err, `Could not load the stock in ${warehouse.code}.`));
+      });
+
+    return () => controller.abort();
+  }, [warehouse.id, warehouse.code, onError]);
+
+  if (!rows) return <Spinner className="py-6" />;
+
+  if (rows.length === 0) {
+    return <p className="text-[13px] text-slate-500">Nothing is stocked here yet.</p>;
+  }
+
+  return (
+    <table className="w-full border-collapse text-left">
+      <thead>
+        <tr className="text-[11px] uppercase tracking-wide text-slate-400">
+          <th className="py-2 pr-3 font-semibold">Item</th>
+          <th className="px-3 py-2 text-right font-semibold">On hand</th>
+          <th className="px-3 py-2 text-right font-semibold">Reserved</th>
+          <th className="px-3 py-2 text-right font-semibold">Free</th>
+          <th className="px-3 py-2 text-right font-semibold">Reorder at</th>
+          <th className="py-2 pl-3 font-semibold">Updated</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-slate-200/70">
+        {rows.map((row) => (
+          <tr key={row.id}>
+            <td className="py-2.5 pr-3">
+              <p className="text-[13px] font-medium text-slate-800">
+                {row.product.name}
+                {row.variant && <span className="text-slate-500"> — {row.variant.name}</span>}
+              </p>
+              <p className="text-[11px] text-slate-400">
+                {row.variant?.sku ?? row.product.sku} · per {row.product.unit}
+              </p>
+            </td>
+            <td className="px-3 py-2.5 text-right text-[13px] text-slate-700">{row.onHand}</td>
+            <td className="px-3 py-2.5 text-right text-[13px] text-slate-500">
+              {row.reserved === 0 ? '—' : row.reserved}
+            </td>
+            <td className="px-3 py-2.5 text-right">
+              {row.belowReorderLevel ? (
+                <Badge tone="amber">{row.available} free</Badge>
+              ) : (
+                <span className="text-[13px] font-medium text-slate-900">{row.available}</span>
+              )}
+            </td>
+            <td className="px-3 py-2.5 text-right text-[13px] text-slate-500">
+              {row.reorderLevel === 0 ? '—' : row.reorderLevel}
+            </td>
+            <td className="py-2.5 pl-3 text-[12px] text-slate-400">
+              {new Date(row.updatedAt).toLocaleDateString()}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 

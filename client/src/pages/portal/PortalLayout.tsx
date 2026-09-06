@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { FileText, LogOut, Store } from 'lucide-react';
+import { FileText, LogOut, Package, Store } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 /**
@@ -30,8 +30,9 @@ export default function PortalLayout() {
 
           <nav className="flex items-center gap-1">
             {[
-              { to: '/portal', label: 'Browse products', icon: Store },
-              { to: '/portal/quotations', label: 'Your quotations', icon: FileText },
+              { to: '/portal', label: 'Browse', icon: Store },
+              { to: '/portal/quotations', label: 'Quotations', icon: FileText },
+              { to: '/portal/orders', label: 'Orders', icon: Package },
             ].map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}

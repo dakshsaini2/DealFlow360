@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { ProductSummary } from './catalog';
 
 export type AdminWarehouse = {
   id: string;
@@ -8,6 +9,19 @@ export type AdminWarehouse = {
   shippingCostWeight: number;
   isActive: boolean;
   _count: { inventory: number };
+};
+
+export type AdminStockRow = {
+  id: string;
+  product: { id: string; sku: string; name: string; unit: string };
+  variant: { id: string; sku: string; name: string } | null;
+  onHand: number;
+  reserved: number;
+  available: number;
+  reorderLevel: number;
+  reorderQuantity: number;
+  belowReorderLevel: boolean;
+  updatedAt: string;
 };
 
 export type AdminPlan = {
@@ -67,6 +81,25 @@ export type AdminSetting = {
   default: string;
 };
 
+/* ── product master ─────────────────────────────────── */
+
+/** Admin only; a sales manager gets a 403 from this one route. */
+export async function createProduct(input: {
+  sku: string;
+  name: string;
+  categoryId: string;
+  description?: string;
+  productType: 'GOODS' | 'SERVICE';
+  basePrice: number;
+  costPrice?: number;
+  unit: string;
+  taxRate: number;
+}) {
+  const { data } = await api.post<{ product: ProductSummary }>('/admin/products', input);
+
+  return data.product;
+}
+
 /* ── warehouses ─────────────────────────────────────── */
 
 export async function fetchAdminWarehouses(signal?: AbortSignal) {
@@ -96,6 +129,16 @@ export async function updateWarehouse(
   );
 
   return data.warehouse;
+}
+
+/** Everything one warehouse holds, newest reservation state included. */
+export async function fetchWarehouseStock(warehouseId: string, signal?: AbortSignal) {
+  const { data } = await api.get<{ data: AdminStockRow[] }>(
+    `/admin/warehouses/${warehouseId}/stock`,
+    { signal },
+  );
+
+  return data.data;
 }
 
 export async function setStock(
