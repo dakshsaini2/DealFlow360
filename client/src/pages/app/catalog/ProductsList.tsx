@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 import axios from 'axios';
 import {
   Badge,
@@ -12,6 +12,9 @@ import {
   Spinner,
 } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
+import { useAuth } from '../../../hooks/useAuth';
+import { createProduct } from '../../../util/admin';
+import NewProductModal from './NewProductModal';
 import {
   currency,
   fetchCategories,
@@ -26,11 +29,15 @@ import type { PageMeta } from '../../../util/customers';
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function ProductsList() {
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole('ADMIN');
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [meta, setMeta] = useState<PageMeta | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
@@ -109,6 +116,14 @@ export default function ProductsList() {
       <PageHeader
         title="Catalog"
         subtitle="Products, list prices and the margin each one carries before any discount."
+        action={
+          isAdmin ? (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={15} />
+              New product
+            </Button>
+          ) : undefined
+        }
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -164,6 +179,7 @@ export default function ProductsList() {
           <option value="name">Name</option>
           <option value="priceAsc">Price, low to high</option>
           <option value="priceDesc">Price, high to low</option>
+          <option value="recent">Recently added</option>
         </select>
 
         <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[14px] text-slate-700">
@@ -181,6 +197,11 @@ export default function ProductsList() {
       </div>
 
       {error && <ErrorBanner message={error} />}
+      {notice && (
+        <p className="rounded-xl bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-700">
+          {notice}
+        </p>
+      )}
 
       <Card>
         {loading ? (
@@ -269,6 +290,33 @@ export default function ProductsList() {
             </Button>
           </div>
         </div>
+      )}
+
+      {creating && (
+        <NewProductModal
+          categories={categories}
+          onClose={() => setCreating(false)}
+          onSubmit={async (input) => {
+            try {
+              const created = await createProduct(input);
+              setCreating(false);
+              setError('');
+              setNotice(`${created.sku} — ${created.name} added to the catalog.`);
+              // Newest first, so the product just added is the first thing
+              // seen rather than buried alphabetically on some later page.
+              // Already there? Nothing changes, so reload by hand.
+              if (sort === 'recent' && page === 1) {
+                load(new AbortController().signal);
+              } else {
+                setSort('recent');
+                setPage(1);
+              }
+            } catch (err) {
+              setCreating(false);
+              setError(getApiErrorMessage(err, 'That product could not be created.'));
+            }
+          }}
+        />
       )}
     </div>
   );

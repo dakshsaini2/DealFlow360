@@ -8,7 +8,8 @@ import {
 import { round2 } from "../../common/utils/serialize.js";
 import type { ListProductsQuery } from "./catalog.types.js";
 
-const LIST_SELECT = {
+/** The product row every list — catalog or admin — hands back. */
+export const PRODUCT_LIST_SELECT = {
   id: true,
   sku: true,
   name: true,
@@ -60,19 +61,19 @@ export async function listProducts(
       orderBy,
       skip: page.skip,
       take: page.take,
-      select: LIST_SELECT,
+      select: PRODUCT_LIST_SELECT,
     }),
     prisma.product.count({ where }),
   ]);
 
-  return paginated(rows.map(toListItem), total, page);
+  return paginated(rows.map(toProductListItem), total, page);
 }
 
 export async function getProduct(id: string) {
   const product = await prisma.product.findUnique({
     where: { id },
     select: {
-      ...LIST_SELECT,
+      ...PRODUCT_LIST_SELECT,
       createdAt: true,
       variants: {
         where: { isActive: true },
@@ -176,7 +177,7 @@ export async function getProduct(id: string) {
   const now = new Date();
 
   return {
-    ...toListItem(product),
+    ...toProductListItem(product),
     createdAt: product.createdAt.toISOString(),
     variants: product.variants.map((variant) => ({
       id: variant.id,
@@ -257,7 +258,7 @@ export async function listCategories() {
 
 /* ── helpers ──────────────────────────────────────── */
 
-type ListRow = {
+export type ProductListRow = {
   id: string;
   sku: string;
   name: string;
@@ -276,7 +277,7 @@ type ListRow = {
  * Flattens the Prisma row and derives the list margin, so the catalog can show
  * headroom without every caller repeating the arithmetic.
  */
-function toListItem(product: ListRow) {
+export function toProductListItem(product: ProductListRow) {
   const basePrice = Number(product.basePrice);
   const costPrice = product.costPrice === null ? null : Number(product.costPrice);
 

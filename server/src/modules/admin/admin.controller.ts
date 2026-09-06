@@ -4,6 +4,7 @@ import { validate } from "../../common/utils/validate.js";
 import * as service from "./admin.service.js";
 import {
   createPlanSchema,
+  createProductSchema,
   createTierSchema,
   createWarehouseSchema,
   idParamSchema,
@@ -27,6 +28,13 @@ function handler<T>(run: (req: Request) => Promise<T>, status = 200) {
   };
 }
 
+/* ── product master ───────────────────────────────── */
+
+export const createProduct = handler(
+  (req) => service.createProduct(currentUser(req), validate(createProductSchema, req.body)),
+  201,
+);
+
 /* ── warehouses & stock ───────────────────────────── */
 
 export const listWarehouses = handler(() => service.listWarehouses());
@@ -42,6 +50,10 @@ export const updateWarehouse = handler((req) =>
     validate(idParamSchema, req.params).id,
     validate(updateWarehouseSchema, req.body),
   ),
+);
+
+export const listStock = handler((req) =>
+  service.listWarehouseStock(validate(idParamSchema, req.params).id),
 );
 
 export const setStock = handler((req) =>
