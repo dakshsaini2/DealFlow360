@@ -7,6 +7,9 @@ import LandingPage from './pages/LandingPage'
 import Login from './pages/auth/Login'
 import Signup from './pages/auth/Signup'
 import AcceptInvite from './pages/auth/AcceptInvite'
+import VerifyEmail from './pages/auth/VerifyEmail'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword from './pages/auth/ResetPassword'
 import Dashboard from './pages/app/Dashboard'
 import CustomersList from './pages/app/customers/CustomersList'
 import CustomerDetail from './pages/app/customers/CustomerDetail'
@@ -42,7 +45,15 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/invite/:token" element={<AcceptInvite />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password/:token" element={<ResetPassword />} />
           </Route>
+
+          {/*
+            Verification is reached *while signed in* — a new signup already has
+            a session — so it sits outside the signed-out-only guard.
+          */}
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
 
           {/*
@@ -52,8 +63,12 @@ function App() {
           */}
           <Route element={<ProtectedRoute roles={['CUSTOMER']} redirectTo="/app" />}>
             <Route path="/portal" element={<PortalLayout />}>
-              <Route index element={<PortalQuotations />} />
-              <Route path="products" element={<PortalStore />} />
+              {/*
+                A customer's job here starts with choosing what to buy, so the
+                store is the landing page and their quotations sit alongside it.
+              */}
+              <Route index element={<PortalStore />} />
+              <Route path="quotations" element={<PortalQuotations />} />
               <Route path="quotations/:id" element={<PortalQuotation />} />
             </Route>
           </Route>

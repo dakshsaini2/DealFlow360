@@ -46,6 +46,8 @@ export type PublicUser = {
   firstName: string;
   lastName: string;
   roles: UserRole[];
+  /** False until the address has been proved with an emailed code. */
+  emailVerified: boolean;
 };
 
 export type AuthResult = {
@@ -66,3 +68,29 @@ export const acceptInviteSchema = z.object({
 });
 
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
+
+/* ── email verification & password reset ──────────── */
+
+export const verifyEmailSchema = z.object({
+  email,
+  /** Six digits, as sent. */
+  code: z.string().trim().regex(/^\d{6}$/, "must be a 6-digit code"),
+});
+
+export const resendVerificationSchema = z.object({ email });
+
+export const forgotPasswordSchema = z.object({ email });
+
+export const resetTokenParamSchema = z.object({
+  token: z.string().trim().min(20).max(200),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(20).max(200),
+  password,
+});
+
+export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

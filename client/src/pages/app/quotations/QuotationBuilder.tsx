@@ -12,7 +12,8 @@ import {
   Spinner,
   TextField,
 } from '../../../components/ui';
-import { getApiErrorMessage } from '../../../util/api';
+import { SALES_WRITE_ROLES, getApiErrorMessage } from '../../../util/api';
+import { useAuth } from '../../../hooks/useAuth';
 import { currency, marginTone } from '../../../util/catalog';
 import { tierTone } from '../../../util/customers';
 import {
@@ -37,6 +38,7 @@ import RiskPanel from './RiskPanel';
 
 export default function QuotationBuilder() {
   const { id } = useParams<{ id: string }>();
+  const { hasRole } = useAuth();
   const navigate = useNavigate();
   const [data, setData] = useState<QuotationResponse | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -92,13 +94,18 @@ export default function QuotationBuilder() {
   }
 
   const { quotation, risk } = data;
-  const editable = ['DRAFT', 'SENT', 'UNDER_NEGOTIATION'].includes(quotation.status);
+  // Editing needs both an open status and a role the server will accept —
+  // Finance can read a quote and approve it, but not rewrite its lines.
+  const canWrite = hasRole(...SALES_WRITE_ROLES);
+  const editable =
+    canWrite && ['DRAFT', 'SENT', 'UNDER_NEGOTIATION'].includes(quotation.status);
 
   // Confirmation is the quote-to-order handover. The server enforces this same
   // rule; mirroring it here just keeps the button from offering a dead click.
   const awaitingApproval = quotation.approvalStatus === 'PENDING';
   const approvalBlocked = ['PENDING', 'REJECTED', 'RETURNED'].includes(quotation.approvalStatus);
   const confirmable =
+    canWrite &&
     ['SENT', 'UNDER_NEGOTIATION'].includes(quotation.status) &&
     !approvalBlocked &&
     quotation.lines.length > 0;
@@ -118,7 +125,7 @@ export default function QuotationBuilder() {
                 Add product
               </Button>
             )}
-            {quotation.status === 'DRAFT' && (
+            {canWrite && quotation.status === 'DRAFT' && (
               <Button
                 onClick={() => run(() => sendQuotation(id))}
                 loading={busy}

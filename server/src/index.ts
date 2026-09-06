@@ -6,6 +6,7 @@ import {
 import { env } from "./common/utils/env.js";
 import { disconnectPrisma } from "./common/utils/prisma.js";
 import { adminRouter } from "./modules/admin/admin.routes.js";
+import { devRouter, devRoutesEnabled } from "./modules/dev/dev.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { catalogRouter } from "./modules/catalog/catalog.routes.js";
 import { customersRouter } from "./modules/customers/customers.routes.js";
@@ -51,6 +52,14 @@ app.use("/api/invoices", invoicesRouter);
 app.use("/api/deal-health", healthRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/reports", reportsRouter);
+
+/**
+ * Reading captured mail is a development affordance, so the route does not
+ * exist in production at all rather than being guarded inside the handler.
+ */
+if (devRoutesEnabled) {
+  app.use("/api/dev", devRouter);
+}
 
 /** The customer-facing surface — a separate, restricted view (spec B8). */
 app.use("/api/portal", portalRouter);

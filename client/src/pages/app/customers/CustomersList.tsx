@@ -11,7 +11,8 @@ import {
   PageHeader,
   Spinner,
 } from '../../../components/ui';
-import { getApiErrorMessage } from '../../../util/api';
+import { SALES_WRITE_ROLES, getApiErrorMessage } from '../../../util/api';
+import { useAuth } from '../../../hooks/useAuth';
 import {
   fetchCustomerTiers,
   fetchCustomers,
@@ -26,6 +27,8 @@ import CustomerFormModal from './CustomerFormModal';
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function CustomersList() {
+  const { hasRole } = useAuth();
+  const canWrite = hasRole(...SALES_WRITE_ROLES);
   const [customers, setCustomers] = useState<CustomerSummary[]>([]);
   const [meta, setMeta] = useState<PageMeta | null>(null);
   const [tiers, setTiers] = useState<CustomerTier[]>([]);
@@ -102,10 +105,12 @@ export default function CustomersList() {
         title="Customers"
         subtitle="Every account you can quote against, with its tier and discount ceiling."
         action={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={16} />
-            New customer
-          </Button>
+          canWrite && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={16} />
+              New customer
+            </Button>
+          )
         }
       />
 
@@ -167,7 +172,7 @@ export default function CustomersList() {
                 ? 'Try clearing the filters above.'
                 : 'Create your first account to start quoting.'
             }
-            action={<Button onClick={() => setCreating(true)}>New customer</Button>}
+            action={canWrite ? <Button onClick={() => setCreating(true)}>New customer</Button> : undefined}
           />
         ) : (
           <div className="overflow-x-auto">

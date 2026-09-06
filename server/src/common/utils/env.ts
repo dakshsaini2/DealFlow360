@@ -35,6 +35,29 @@ export const env = {
   jwtSecret: required("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "1d",
   saltRounds: number("BCRYPT_SALT_ROUNDS", 10),
+
+  /**
+   * Where links in outgoing mail point. The server never sees the browser's
+   * origin, so it has to be told.
+   */
+  appUrl: process.env.APP_URL ?? "http://localhost:5173",
+
+  /**
+   * SMTP is optional. With no host configured the mailer falls back to a
+   * development outbox that logs each message instead of sending it, so the
+   * whole verification and invitation flow works without credentials.
+   */
+  smtp: {
+    host: process.env.SMTP_HOST ?? "",
+    port: number("SMTP_PORT", 587),
+    secure: (process.env.SMTP_SECURE ?? "false") === "true",
+    user: process.env.SMTP_USER ?? "",
+    password: process.env.SMTP_PASSWORD ?? "",
+    from: process.env.SMTP_FROM ?? "DealFlow360 <no-reply@dealflow360.com>",
+  },
 } as const;
+
+/** True when real mail can actually be sent. */
+export const hasSmtp = Boolean(env.smtp.host && env.smtp.user);
 
 export const isProduction = env.nodeEnv === "production";

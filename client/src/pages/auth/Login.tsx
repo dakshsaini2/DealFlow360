@@ -10,7 +10,9 @@ export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
-  const from = (location.state as { from?: string } | null)?.from ?? null;
+  const state = location.state as { from?: string; notice?: string } | null;
+  const from = state?.from ?? null;
+  const notice = state?.notice ?? '';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -51,6 +53,13 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
         {error && <FormError message={error} />}
 
+        {/* Set by the reset flow, so the change is confirmed where they land. */}
+        {notice && (
+          <p className="rounded-xl bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-700">
+            {notice}
+          </p>
+        )}
+
         <Field
           id="login-email"
           label="Email address"
@@ -65,18 +74,26 @@ export default function Login() {
           required
         />
 
-        <PasswordField
-          id="login-password"
-          label="Password"
-          icon={Lock}
-          name="password"
-          autoComplete="current-password"
-          placeholder="••••••••"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          disabled={loading}
-          required
-        />
+        <div className="flex flex-col gap-1.5">
+          <PasswordField
+            id="login-password"
+            label="Password"
+            icon={Lock}
+            name="password"
+            autoComplete="current-password"
+            placeholder="••••••••"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            disabled={loading}
+            required
+          />
+          <Link
+            to="/forgot-password"
+            className="self-end text-[13px] font-medium text-slate-500 no-underline transition-colors hover:text-brand-600"
+          >
+            Forgot your password?
+          </Link>
+        </div>
 
         <SubmitButton loading={loading}>Sign In</SubmitButton>
       </form>

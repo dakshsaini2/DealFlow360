@@ -19,33 +19,39 @@ datasource db {
 // ============================================================
 
 model User {
-  id               String           @id @default(uuid()) @db.Uuid
-  email            String           @unique
-  passwordHash     String
-  firstName        String
-  lastName         String
-  phone            String?
-  isActive         Boolean          @default(true)
-  lastLoginAt      DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
-  ordersCreated    Order[]          @relation("OrderSalesRep")
-  userRoles        UserRole[]
-  teamMemberships  TeamMember[]
-  managedTeams     Team[]           @relation("TeamManager")
-  createdCustomers Customer[]       @relation("CustomerCreatedBy")
-  quotations       Quotation[]      @relation("QuotationSalesRep")
-  quoteRevisions   QuoteRevision[]
-  approvalActions  ApprovalAction[] @relation("Approver")
-  customerUsers    CustomerUser[]
-  invitesSent      PortalInvite[]   @relation("InvitedBy")
-  inviteAccepted   PortalInvite[]   @relation("InviteAcceptedBy")
-  changeRequests   ChangeRequest[]  @relation("RequestedBy")
-  resolvedRequests ChangeRequest[]  @relation("ResolvedBy")
-  lineComments     LineComment[]
-  counterOffers    CounterOffer[]
-  auditLogs        AuditLog[]
-  alertsResolved   AnomalyAlert[]   @relation("AlertResolvedBy")
+  id                 String              @id @default(uuid()) @db.Uuid
+  email              String              @unique
+  passwordHash       String
+  firstName          String
+  lastName           String
+  phone              String?
+  isActive           Boolean             @default(true)
+  /**
+   * Set once the address has been proved by entering an emailed code. Null
+   * means unverified, which is allowed but surfaced in the UI.
+   */
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  ordersCreated      Order[]             @relation("OrderSalesRep")
+  userRoles          UserRole[]
+  teamMemberships    TeamMember[]
+  managedTeams       Team[]              @relation("TeamManager")
+  createdCustomers   Customer[]          @relation("CustomerCreatedBy")
+  quotations         Quotation[]         @relation("QuotationSalesRep")
+  quoteRevisions     QuoteRevision[]
+  approvalActions    ApprovalAction[]    @relation("Approver")
+  customerUsers      CustomerUser[]
+  verificationTokens VerificationToken[]
+  invitesSent        PortalInvite[]      @relation("InvitedBy")
+  inviteAccepted     PortalInvite[]      @relation("InviteAcceptedBy")
+  changeRequests     ChangeRequest[]     @relation("RequestedBy")
+  resolvedRequests   ChangeRequest[]     @relation("ResolvedBy")
+  lineComments       LineComment[]
+  counterOffers      CounterOffer[]
+  auditLogs          AuditLog[]
+  alertsResolved     AnomalyAlert[]      @relation("AlertResolvedBy")
 }
 
 // ============================================================
@@ -157,6 +163,42 @@ model Customer {
  * rep's invitation into a `CustomerUser` link once the recipient sets a
  * password.
  */
+/**
+ * A one-time secret sent to an email address, for both verification codes and
+ * password resets.
+ * One table rather than two: they differ only in what is generated and where it
+ * is typed back in, and sharing the row means expiry, single use and
+ * attempt-limiting are implemented once. Only a hash is stored, so a leaked
+ * database yields nothing usable.
+ */
+model VerificationToken {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /**
+   * `EMAIL_VERIFICATION` holds a six-digit code the user types; `PASSWORD_RESET`
+   * holds a long random token that travels in a link.
+   */
+  type String
+
+  codeHash String
+
+  /**
+   * Guards against brute-forcing a six-digit code.
+   */
+  attempts Int @default(0)
+
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([codeHash])
+  @@index([expiresAt])
+}
+
 model PortalInvite {
   id         String @id @default(uuid()) @db.Uuid
   customerId String @db.Uuid

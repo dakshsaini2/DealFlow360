@@ -28,7 +28,23 @@ export default function PublicOnlyRoute() {
     // Honour wherever they were originally headed, if a guard sent them here.
     const from = (location.state as { from?: string } | null)?.from;
 
-    return <Navigate to={from ?? homeForUser(user)} replace />;
+    if (from) {
+      return <Navigate to={from} replace />;
+    }
+
+    /*
+      A signup lands here the instant its session exists, so this guard — not
+      the page — decides where a new account goes. Confirming the emailed code
+      is the next step; `/verify-email` sits outside this guard, so there is no
+      loop, and it offers its own way to skip.
+    */
+    if (!user.emailVerified) {
+      return (
+        <Navigate to={`/verify-email?email=${encodeURIComponent(user.email)}`} replace />
+      );
+    }
+
+    return <Navigate to={homeForUser(user)} replace />;
   }
 
   return <Outlet />;

@@ -13,7 +13,8 @@ import {
   SelectField,
   Spinner,
 } from '../../../components/ui';
-import { getApiErrorMessage } from '../../../util/api';
+import { SALES_WRITE_ROLES, getApiErrorMessage } from '../../../util/api';
+import { useAuth } from '../../../hooks/useAuth';
 import { currency } from '../../../util/catalog';
 import { fetchCustomers, type CustomerSummary } from '../../../util/customers';
 import {
@@ -30,6 +31,8 @@ import type { PageMeta } from '../../../util/customers';
 const SEARCH_DEBOUNCE_MS = 300;
 
 export default function QuotationsList() {
+  const { hasRole } = useAuth();
+  const canWrite = hasRole(...SALES_WRITE_ROLES);
   const [quotations, setQuotations] = useState<QuotationSummary[]>([]);
   const [meta, setMeta] = useState<PageMeta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,10 +100,12 @@ export default function QuotationsList() {
         title="Quotations"
         subtitle="Every deal in flight, with the risk score that decides whether it needs approval."
         action={
-          <Button onClick={() => setCreating(true)}>
-            <Plus size={16} />
-            New quotation
-          </Button>
+          canWrite && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus size={16} />
+              New quotation
+            </Button>
+          )
         }
       />
 
@@ -173,7 +178,7 @@ export default function QuotationsList() {
           <EmptyState
             title="No quotations yet"
             description="Create one to start building a deal."
-            action={<Button onClick={() => setCreating(true)}>New quotation</Button>}
+            action={canWrite ? <Button onClick={() => setCreating(true)}>New quotation</Button> : undefined}
           />
         ) : (
           <div className="overflow-x-auto">

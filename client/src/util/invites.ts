@@ -61,6 +61,9 @@ export async function createPortalInvite(
     invite: { id: string; email: string; expiresAt: string };
     invitePath: string;
     token: string;
+    /** True when the invitation actually left by email. */
+    emailed: boolean;
+    mailConfigured: boolean;
   }>(`/customers/${customerId}/portal-invites`, input);
 
   return { ...data, inviteUrl: `${window.location.origin}${data.invitePath}` };

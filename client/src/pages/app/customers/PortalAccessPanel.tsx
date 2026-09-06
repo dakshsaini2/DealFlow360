@@ -21,7 +21,9 @@ export default function PortalAccessPanel({ customerId }: { customerId: string }
   const [access, setAccess] = useState<PortalAccess | null>(null);
   const [error, setError] = useState('');
   const [inviting, setInviting] = useState(false);
-  const [issued, setIssued] = useState<{ email: string; url: string } | null>(null);
+  const [issued, setIssued] = useState<{ email: string; url: string; emailed: boolean } | null>(
+    null,
+  );
 
   const load = useCallback(
     (signal?: AbortSignal) => {
@@ -181,7 +183,7 @@ export default function PortalAccessPanel({ customerId }: { customerId: string }
               const result = await createPortalInvite(customerId, input);
               // The token is returned exactly once, so it is shown immediately
               // rather than stored anywhere it could be read back.
-              setIssued({ email: input.email, url: result.inviteUrl });
+              setIssued({ email: input.email, url: result.inviteUrl, emailed: result.emailed });
               load();
             } catch (err) {
               setError(getApiErrorMessage(err, 'That invitation could not be created.'));
@@ -273,7 +275,7 @@ function InviteLinkDialog({
   issued,
   onClose,
 }: {
-  issued: { email: string; url: string };
+  issued: { email: string; url: string; emailed: boolean };
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -282,8 +284,19 @@ function InviteLinkDialog({
     <Modal title="Invitation link" onClose={onClose}>
       <div className="flex flex-col gap-4 p-5">
         <p className="text-[13px] leading-relaxed text-slate-500">
-          Send this to <strong className="text-slate-800">{issued.email}</strong>. It is shown
-          only now — if you lose it, revoke the invitation and issue a new one.
+          {issued.emailed ? (
+            <>
+              We have emailed this to{' '}
+              <strong className="text-slate-800">{issued.email}</strong>. Here is the same link in
+              case you would rather send it yourself.
+            </>
+          ) : (
+            <>
+              No mail server is configured, so send this to{' '}
+              <strong className="text-slate-800">{issued.email}</strong> yourself. It is shown only
+              now — if you lose it, revoke the invitation and issue a new one.
+            </>
+          )}
         </p>
 
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">

@@ -520,7 +520,7 @@ function CounterOfferDialog({
 function BackLink() {
   return (
     <Link
-      to="/portal"
+      to="/portal/quotations"
       className="inline-flex w-fit items-center gap-1.5 text-[13px] font-medium text-slate-500 no-underline hover:text-slate-900"
     >
       <ArrowLeft size={15} />

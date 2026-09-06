@@ -17,6 +17,12 @@ export type AuthContextValue = {
   loading: boolean;
   login: (email: string, password: string) => Promise<PublicUser>;
   signup: (input: SignupInput) => Promise<PublicUser>;
+  /**
+   * Re-reads the signed-in user from the server. Needed after something changes
+   * server-side that the stored copy cannot know about — verifying an email
+   * being the obvious one.
+   */
+  refresh: () => Promise<PublicUser | null>;
   logout: () => void;
   hasRole: (...roles: UserRole[]) => boolean;
 };
@@ -78,6 +84,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.user;
   }, []);
 
+  const refresh = useCallback(async () => {
+    try {
+      const { data } = await api.get<{ user: PublicUser }>('/auth/me');
+
+      setUser(data.user);
+      setStoredUser(data.user);
+
+      return data.user;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const logout = useCallback(() => {
     clearAuth();
     setUser(null);
@@ -89,10 +108,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       login,
       signup,
+      refresh,
       logout,
       hasRole: (...roles: UserRole[]) => (user ? user.roles.some((r) => roles.includes(r)) : false),
     }),
-    [user, loading, login, signup, logout],
+    [user, loading, login, signup, refresh, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

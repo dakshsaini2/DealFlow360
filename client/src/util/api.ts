@@ -14,7 +14,16 @@ export type PublicUser = {
   lastName: string;
   /** A user can hold several roles — a manager is usually a rep too. */
   roles: UserRole[];
+  /** False until the address has been proved with an emailed code. */
+  emailVerified: boolean;
 };
+
+/**
+ * The roles the server's `canWrite` accepts on customers and quotations.
+ * Mirrored here so the UI never offers a button the API will refuse — Finance
+ * approves and reconciles, but does not create accounts or build quotes.
+ */
+export const SALES_WRITE_ROLES: UserRole[] = ['ADMIN', 'SALES_MANAGER', 'SALES_REP'];
 
 /**
  * Where a signed-in user belongs. A portal customer has no internal workspace,

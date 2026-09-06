@@ -11,7 +11,7 @@ import {
   Spinner,
 } from '../../../components/ui';
 import axios from 'axios';
-import { getApiErrorMessage } from '../../../util/api';
+import { SALES_WRITE_ROLES, getApiErrorMessage } from '../../../util/api';
 import {
   fetchCustomer,
   fetchCustomerTiers,
@@ -36,7 +36,9 @@ export default function CustomerDetailPage() {
   const navigate = useNavigate();
   const { hasRole } = useAuth();
   const canArchive = hasRole('ADMIN', 'SALES_MANAGER');
-  const canInvite = hasRole('ADMIN', 'SALES_MANAGER', 'SALES_REP');
+  const canWrite = hasRole(...SALES_WRITE_ROLES);
+  // Issuing portal access is the same right as editing the account.
+  const canInvite = canWrite;
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [history, setHistory] = useState<CustomerHistory | null>(null);
@@ -115,17 +117,21 @@ export default function CustomerDetailPage() {
         subtitle={`${customer.customerCode}${customer.email ? ` · ${customer.email}` : ''}`}
         action={
           <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => setEditing(true)}>
-              <Pencil size={15} />
-              Edit
-            </Button>
+            {canWrite && (
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Pencil size={15} />
+                Edit
+              </Button>
+            )}
             {canArchive && (
               <Button variant="secondary" onClick={toggleArchived} loading={archiving}>
                 {customer.isActive ? <Archive size={15} /> : <ArchiveRestore size={15} />}
                 {customer.isActive ? 'Archive' : 'Restore'}
               </Button>
             )}
-            <Button onClick={() => navigate('/app/quotations')}>New quotation</Button>
+            {canWrite && (
+              <Button onClick={() => navigate('/app/quotations')}>New quotation</Button>
+            )}
           </div>
         }
       />

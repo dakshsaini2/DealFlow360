@@ -30,8 +30,8 @@ export default function PortalLayout() {
 
           <nav className="flex items-center gap-1">
             {[
-              { to: '/portal/products', label: 'Browse', icon: Store },
-              { to: '/portal', label: 'Quotations', icon: FileText },
+              { to: '/portal', label: 'Browse products', icon: Store },
+              { to: '/portal/quotations', label: 'Your quotations', icon: FileText },
             ].map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}

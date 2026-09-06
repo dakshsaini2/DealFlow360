@@ -26,13 +26,30 @@ export function requireRole(...roles: UserRole[]) {
     }
 
     if (!hasAnyRole(req.user, roles)) {
+      // Phrased for the person who hit it, not the developer who wrote the
+      // route — this reaches the UI verbatim.
       return next(
-        new ForbiddenError(`Requires one of: ${roles.join(", ")}`),
+        new ForbiddenError(
+          `Your role does not allow this. It needs ${describeRoles(roles)}.`,
+        ),
       );
     }
 
     next();
   };
+}
+
+/** "a sales manager", or "a sales rep, sales manager or admin". */
+function describeRoles(roles: readonly UserRole[]): string {
+  const readable = roles.map((role) => role.replace(/_/g, " ").toLowerCase());
+
+  if (readable.length === 1) {
+    return `the ${readable[0]} role`;
+  }
+
+  const last = readable[readable.length - 1];
+
+  return `the ${readable.slice(0, -1).join(", ")} or ${last} role`;
 }
 
 /**

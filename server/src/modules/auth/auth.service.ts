@@ -14,6 +14,7 @@ import {
   verifyPassword,
 } from "../../common/utils/auth.js";
 import { prisma } from "../../common/utils/prisma.js";
+import { sendVerificationCode } from "./verification.service.js";
 import type {
   AuthResult,
   LoginInput,
@@ -29,6 +30,7 @@ type UserRecord = {
   firstName: string;
   lastName: string;
   passwordHash: string;
+  emailVerifiedAt: Date | null;
   userRoles: { role: { name: string } }[];
 };
 
@@ -60,6 +62,14 @@ export async function signup({
       },
     },
     include: WITH_ROLES,
+  });
+
+  // The account exists either way; a mail failure must not undo a signup, so
+  // this never throws.
+  await sendVerificationCode({
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
   });
 
   return toAuthResult(user);
@@ -125,6 +135,9 @@ function toPublicUser(user: Omit<UserRecord, "passwordHash">): PublicUser {
     firstName: user.firstName,
     lastName: user.lastName,
     roles: toUserRoles(user.userRoles),
+    // Drives the "confirm your email" prompt; a date would tell the client
+    // nothing it needs.
+    emailVerified: user.emailVerifiedAt !== null,
   };
 }
 

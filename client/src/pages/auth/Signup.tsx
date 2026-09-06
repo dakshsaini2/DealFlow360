@@ -45,6 +45,9 @@ export default function Signup() {
         password,
       });
 
+      // `PublicOnlyRoute` redirects the moment the session exists — to the
+      // verification screen for a new account — so this is only the fallback
+      // for the already-verified case.
       navigate(homeForUser(user), { replace: true });
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not create your account. Please try again.'));

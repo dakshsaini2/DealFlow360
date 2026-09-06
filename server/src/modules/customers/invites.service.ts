@@ -6,6 +6,8 @@ import { recordAudit } from "../../common/utils/audit.js";
 import { hashPassword, signToken } from "../../common/utils/auth.js";
 import { prisma } from "../../common/utils/prisma.js";
 import { serialize } from "../../common/utils/serialize.js";
+import { portalInviteEmail } from "../../common/email/templates.js";
+import { hasSmtp, sendMail } from "../../common/utils/mailer.js";
 import type { AcceptInviteInput } from "../auth/auth.types.js";
 import type { CreateInviteInput } from "./customers.types.js";
 
@@ -167,24 +169,50 @@ export async function createInvite(
     select: { id: true, email: true, expiresAt: true },
   });
 
+  const invitePath = `/invite/${token}`;
+
+  const inviter = await prisma.user.findUnique({
+    where: { id: user.sub },
+    select: { firstName: true, lastName: true },
+  });
+
+  const sent = await sendMail(
+    portalInviteEmail({
+      to: input.email,
+      firstName: input.firstName,
+      customerName: customer.name,
+      invitedBy: inviter ? `${inviter.firstName} ${inviter.lastName}` : "Your account manager",
+      invitePath,
+      expiresAt: invite.expiresAt,
+    }),
+  );
+
   await recordAudit({
     actorUserId: user.sub,
     action: AUDIT_ACTION.CREATE,
     entityType: "PortalInvite",
     entityId: invite.id,
-    newValues: { customerId, email: input.email },
+    newValues: { customerId, email: input.email, emailedVia: sent.via },
     reason: `Portal access invited for ${customer.name}`,
   });
 
   return {
     invite: serialize(invite),
+    /** True when the invitation actually left by email. */
+    emailed: sent.via === "smtp",
     /**
      * The path the customer opens. It is relative so the client can prefix its
      * own origin — the server has no reliable idea what host the browser used.
+     *
+     * Still returned even when the email went out, because a rep often needs to
+     * paste the link into a chat, and because without SMTP configured it is the
+     * only way through.
      */
-    invitePath: `/invite/${token}`,
+    invitePath,
     /** Shown once, then unrecoverable. */
     token,
+    /** Lets the UI say whether the rep needs to send the link themselves. */
+    mailConfigured: hasSmtp,
   };
 }
 

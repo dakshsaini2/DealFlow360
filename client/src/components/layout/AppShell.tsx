@@ -9,6 +9,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MailWarning,
   Package,
   Receipt,
   ShoppingCart,
@@ -154,6 +155,23 @@ export default function AppShell() {
             Signed in as <span className="font-medium text-slate-600">{user?.email}</span>
           </p>
         </header>
+
+        {/* Verification is not a gate, so it is a standing nudge rather than
+            a wall. */}
+        {user && !user.emailVerified && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-5 py-2.5 lg:px-8">
+            <MailWarning size={15} className="shrink-0 text-amber-500" />
+            <p className="text-[13px] text-amber-900">
+              Your email address is not verified yet.
+            </p>
+            <Link
+              to={`/verify-email?email=${encodeURIComponent(user.email)}`}
+              className="text-[13px] font-semibold text-amber-900 underline"
+            >
+              Enter your code
+            </Link>
+          </div>
+        )}
 
         <main className="flex-1 p-5 lg:p-8">
           <Outlet />
