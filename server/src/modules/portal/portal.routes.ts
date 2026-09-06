@@ -29,6 +29,15 @@ portalRouter.use(async (req: Request, _res: Response, next: NextFunction) => {
   }
 });
 
+/* ── storefront: the customer browses and requests ── */
+
+portalRouter.get("/accounts", controller.accounts);
+portalRouter.get("/products", controller.browse);
+portalRouter.get("/categories", controller.categories);
+portalRouter.post("/requests", controller.submitRequest);
+
+/* ── their quotations ─────────────────────────────── */
+
 portalRouter.get("/quotations", controller.list);
 portalRouter.get("/quotations/:id", controller.detail);
 portalRouter.post("/quotations/:id/comments", controller.comment);

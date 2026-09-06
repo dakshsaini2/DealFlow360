@@ -482,6 +482,14 @@ model Quotation {
   approvalStatus   String
   approvalRequired Boolean @default(false)
 
+  /**
+   * `REP` for a quotation a salesperson started, `PORTAL` for one the customer
+   * requested themselves. A portal request arrives unpriced and unsent, so the
+   * rep still owns discounting and the governance engine is never bypassed —
+   * this only records where the deal came from.
+   */
+  source String @default("REP")
+
   subtotal      Decimal @default(0) @db.Decimal(14, 2)
   discountTotal Decimal @default(0) @db.Decimal(14, 2)
   taxTotal      Decimal @default(0) @db.Decimal(14, 2)
@@ -519,6 +527,7 @@ model Quotation {
   @@index([priceListId])
   @@index([status])
   @@index([approvalStatus])
+  @@index([source])
   @@index([createdAt])
 }
 

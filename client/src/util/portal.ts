@@ -181,7 +181,93 @@ export function stateTone(label: string): 'neutral' | 'brand' | 'green' | 'amber
   if (label === 'Confirmed') return 'green';
   if (label === 'Under review') return 'amber';
   if (label === 'Under negotiation') return 'brand';
+  if (label === 'Awaiting pricing') return 'amber';
   if (label === 'Expired') return 'red';
 
   return 'neutral';
+}
+
+/* ── the storefront ─────────────────────────────────── */
+
+export type PortalAccount = {
+  id: string;
+  name: string;
+  customerCode: string;
+  isPrimary: boolean;
+  tier: string | null;
+};
+
+/**
+ * A product as the customer sees it: their price, and nothing about how it was
+ * arrived at. Cost, margin and the rep's discount ceiling are absent by design.
+ */
+export type StoreProduct = {
+  id: string;
+  sku: string;
+  name: string;
+  description: string | null;
+  unit: string;
+  category: { id: string; name: string };
+  unitPrice: number | null;
+  /** Only present when the customer's tier price beats the list price. */
+  listPrice: number | null;
+  taxPercent: number | null;
+  subscriptionPlans: SubscriptionPlanRef[];
+};
+
+export type StoreCategory = { id: string; name: string; _count: { products: number } };
+
+export type RequestLine = {
+  productId: string;
+  quantity: number;
+  subscriptionPlanId?: string;
+};
+
+export async function fetchPortalAccounts(signal?: AbortSignal) {
+  const { data } = await api.get<{ accounts: PortalAccount[] }>('/portal/accounts', { signal });
+
+  return data.accounts;
+}
+
+export async function fetchStoreProducts(
+  params: { customerId?: string; q?: string; categoryId?: string; page?: number; pageSize?: number },
+  signal?: AbortSignal,
+) {
+  const { data } = await api.get<{ data: StoreProduct[]; meta: PageMeta }>('/portal/products', {
+    params,
+    signal,
+  });
+
+  return data;
+}
+
+export async function fetchStoreCategories(signal?: AbortSignal) {
+  const { data } = await api.get<{ data: StoreCategory[] }>('/portal/categories', { signal });
+
+  return data.data;
+}
+
+/**
+ * Submits the basket. It becomes a *draft* for the account's rep — the customer
+ * is asking for a quotation, not placing a priced order, so discounting and
+ * approval stay on the seller's side.
+ */
+export async function submitPortalRequest(input: {
+  customerId?: string;
+  lines: RequestLine[];
+  message?: string;
+}) {
+  const { data } = await api.post<{
+    request: {
+      id: string;
+      quoteNumber: string;
+      status: string;
+      grandTotal: number;
+      currencyCode: string;
+      createdAt: string;
+      contact: string;
+    };
+  }>('/portal/requests', input);
+
+  return data.request;
 }

@@ -4,13 +4,16 @@ import { parsePageParams } from "../../common/utils/pagination.js";
 import { validate } from "../../common/utils/validate.js";
 import { confirmQuotation } from "../orders/orders.service.js";
 import * as service from "./portal.service.js";
+import * as storefront from "./storefront.service.js";
 import {
   changeRequestSchema,
   counterOfferSchema,
   idParamSchema,
   lineCommentSchema,
+  browseSchema,
   listPortalQuotationsSchema,
   portalConfirmSchema,
+  submitRequestSchema,
 } from "./portal.types.js";
 
 export async function list(req: Request, res: Response, next: NextFunction) {
@@ -80,6 +83,50 @@ export async function confirm(req: Request, res: Response, next: NextFunction) {
     res
       .status(201)
       .json(await confirmQuotation(currentUser(req), id, input, "portal"));
+  } catch (err) {
+    next(err);
+  }
+}
+
+/* ── storefront ───────────────────────────────────── */
+
+export async function accounts(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await storefront.listAccounts(currentUser(req)));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function browse(req: Request, res: Response, next: NextFunction) {
+  try {
+    const query = validate(browseSchema, req.query);
+    const page = parsePageParams(req.query);
+
+    res.json(await storefront.browseProducts(currentUser(req), query, page));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function categories(_req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await storefront.listCategories());
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * The basket becomes a draft quotation for the rep who owns the account. It is
+ * deliberately not sent or priced with a discount — that stays the rep's call,
+ * and therefore stays subject to approval routing.
+ */
+export async function submitRequest(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = validate(submitRequestSchema, req.body);
+
+    res.status(201).json(await storefront.submitRequest(currentUser(req), input));
   } catch (err) {
     next(err);
   }

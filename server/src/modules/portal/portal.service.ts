@@ -36,13 +36,27 @@ import type {
  * and the tools to argue with them.
  */
 
-/** Statuses a customer may see at all. A draft has never been sent to them. */
+/**
+ * Statuses a customer may see. A rep's draft has never been shown to them, but
+ * a draft the customer *submitted themselves* from the storefront obviously
+ * has — so those are visible too, matched on `source`.
+ */
 const VISIBLE_STATUSES: string[] = [
   QUOTATION_STATUS.SENT,
   QUOTATION_STATUS.UNDER_NEGOTIATION,
   QUOTATION_STATUS.CONFIRMED,
   QUOTATION_STATUS.EXPIRED,
 ];
+
+/** Matches either a quote sent to them, or their own portal request. */
+function visibleToCustomer() {
+  return {
+    OR: [
+      { status: { in: VISIBLE_STATUSES } },
+      { status: QUOTATION_STATUS.DRAFT, source: "PORTAL" },
+    ],
+  };
+}
 
 /** Statuses the customer may still act on. */
 const NEGOTIABLE_STATUSES: string[] = [
@@ -54,7 +68,15 @@ const NEGOTIABLE_STATUSES: string[] = [
  * What a customer is told about approval. The internal states leak how the
  * seller governs discounts, so they collapse into "with us" versus "ready".
  */
-function customerFacingState(status: string, approvalStatus: string) {
+function customerFacingState(status: string, approvalStatus: string, source = "REP") {
+  // A request the customer submitted that the rep has not sent back yet.
+  if (status === QUOTATION_STATUS.DRAFT && source === "PORTAL") {
+    return {
+      label: "Awaiting pricing",
+      detail: "Your request is with your account manager for pricing.",
+    };
+  }
+
   if (status === QUOTATION_STATUS.CONFIRMED) {
     return { label: "Confirmed", detail: "This quotation has been accepted." };
   }
@@ -103,9 +125,9 @@ export async function listQuotations(
 
   const where = {
     customerId: { in: customerIds },
-    status: query.status
-      ? { equals: query.status, in: VISIBLE_STATUSES }
-      : { in: VISIBLE_STATUSES },
+    ...(query.status
+      ? { status: query.status, ...visibleToCustomer() }
+      : visibleToCustomer()),
   };
 
   const [rows, total] = await Promise.all([
@@ -119,6 +141,7 @@ export async function listQuotations(
         quoteNumber: true,
         status: true,
         approvalStatus: true,
+        source: true,
         currencyCode: true,
         grandTotal: true,
         validUntil: true,
@@ -134,11 +157,11 @@ export async function listQuotations(
 
   return paginated(
     rows.map((row) => {
-      const { approvalStatus, ...visible } = row;
+      const { approvalStatus, source, ...visible } = row;
 
       return {
         ...serialize(visible),
-        state: customerFacingState(row.status, approvalStatus),
+        state: customerFacingState(row.status, approvalStatus, row.source),
       };
     }),
     total,
@@ -318,6 +341,7 @@ const CUSTOMER_SELECT = {
   quoteNumber: true,
   status: true,
   approvalStatus: true,
+  source: true,
   currencyCode: true,
   subtotal: true,
   discountTotal: true,
@@ -409,7 +433,7 @@ const CUSTOMER_SELECT = {
 type CustomerQuotation = Awaited<ReturnType<typeof loadForCustomer>>;
 
 function shapeForCustomer(quotation: CustomerQuotation) {
-  const { approvalStatus, salesRep, ...visible } = quotation;
+  const { approvalStatus, source, salesRep, ...visible } = quotation;
 
   return {
     quotation: {
@@ -417,7 +441,8 @@ function shapeForCustomer(quotation: CustomerQuotation) {
       // A name and nothing more — a customer does not need the rep's user id.
       contact: `${salesRep.firstName} ${salesRep.lastName}`,
     },
-    state: customerFacingState(quotation.status, approvalStatus),
+    state: customerFacingState(quotation.status, approvalStatus, source),
+    /** A request still awaiting pricing has nothing to negotiate over yet. */
     canNegotiate: NEGOTIABLE_STATUSES.includes(quotation.status),
     /**
      * A customer may confirm only once the seller's own approval has cleared.
@@ -449,7 +474,10 @@ async function loadForCustomer(user: AuthUser, id: string) {
     throw new NotFoundError("Quotation not found");
   }
 
-  if (!VISIBLE_STATUSES.includes(quotation.status)) {
+  const isOwnRequest =
+    quotation.status === QUOTATION_STATUS.DRAFT && quotation.source === "PORTAL";
+
+  if (!VISIBLE_STATUSES.includes(quotation.status) && !isOwnRequest) {
     throw new NotFoundError("Quotation not found");
   }
 

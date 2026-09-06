@@ -1,5 +1,5 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { FileText, LogOut, Store } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 /**
@@ -27,6 +27,29 @@ export default function PortalLayout() {
               Customer portal
             </span>
           </Link>
+
+          <nav className="flex items-center gap-1">
+            {[
+              { to: '/portal/products', label: 'Browse', icon: Store },
+              { to: '/portal', label: 'Quotations', icon: FileText },
+            ].map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/portal'}
+                className={({ isActive }) =>
+                  `flex items-center gap-1.5 rounded-xl px-3 py-2 text-[13px] font-medium no-underline transition-colors ${
+                    isActive
+                      ? 'bg-brand-50 text-brand-700'
+                      : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+                  }`
+                }
+              >
+                <Icon size={15} />
+                {label}
+              </NavLink>
+            ))}
+          </nav>
 
           <div className="flex items-center gap-3">
             <span className="hidden text-[13px] text-slate-400 sm:inline">

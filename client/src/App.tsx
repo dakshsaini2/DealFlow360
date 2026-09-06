@@ -24,6 +24,7 @@ import Reports from './pages/app/reports/Reports'
 import Backend from './pages/app/admin/Backend'
 import PortalLayout from './pages/portal/PortalLayout'
 import PortalQuotations from './pages/portal/PortalQuotations'
+import PortalStore from './pages/portal/PortalStore'
 import PortalQuotation from './pages/portal/PortalQuotation'
 
 function App() {
@@ -52,6 +53,7 @@ function App() {
           <Route element={<ProtectedRoute roles={['CUSTOMER']} redirectTo="/app" />}>
             <Route path="/portal" element={<PortalLayout />}>
               <Route index element={<PortalQuotations />} />
+              <Route path="products" element={<PortalStore />} />
               <Route path="quotations/:id" element={<PortalQuotation />} />
             </Route>
           </Route>

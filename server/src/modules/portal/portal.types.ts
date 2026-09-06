@@ -33,3 +33,31 @@ export type ListPortalQuotationsQuery = z.infer<typeof listPortalQuotationsSchem
 export type LineCommentInput = z.infer<typeof lineCommentSchema>;
 export type ChangeRequestInput = z.infer<typeof changeRequestSchema>;
 export type CounterOfferInput = z.infer<typeof counterOfferSchema>;
+
+/* ── storefront ───────────────────────────────────── */
+
+export const browseSchema = z.object({
+  /** Which of the caller's accounts to price for; defaults to their primary. */
+  customerId: z.uuid().optional(),
+  q: z.string().trim().max(120).optional(),
+  categoryId: z.uuid().optional(),
+});
+
+export const submitRequestSchema = z.object({
+  customerId: z.uuid().optional(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.uuid(),
+        quantity: z.coerce.number().positive().max(1_000_000),
+        /** Present asks for the item on a recurring plan. */
+        subscriptionPlanId: z.uuid().optional(),
+      }),
+    )
+    .min(1, "add at least one product")
+    .max(100),
+  message: z.string().trim().max(2000).optional(),
+});
+
+export type BrowseQuery = z.infer<typeof browseSchema>;
+export type SubmitRequestInput = z.infer<typeof submitRequestSchema>;

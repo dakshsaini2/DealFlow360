@@ -291,7 +291,7 @@ export async function resolveCounterOffer(
 async function assertVisible(user: AuthUser, quotationId: string) {
   const quotation = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, salesRepId: true, status: true },
+    select: { id: true, salesRepId: true, status: true, source: true },
   });
 
   if (!quotation) {
@@ -304,7 +304,10 @@ async function assertVisible(user: AuthUser, quotationId: string) {
     throw new ForbiddenError("This quotation belongs to another sales rep");
   }
 
-  if (quotation.status === QUOTATION_STATUS.DRAFT) {
+  // A rep's own draft has never been shown to anyone, so there is nothing to
+  // discuss. A draft the *customer* raised from the storefront is different:
+  // it arrives with their message on it, and the rep needs to read it.
+  if (quotation.status === QUOTATION_STATUS.DRAFT && quotation.source !== "PORTAL") {
     throw new ValidationError("A draft quotation has no negotiation thread", [
       "status: quotation has not been sent",
     ]);

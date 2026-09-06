@@ -20,6 +20,8 @@ export type QuotationSummary = {
   validUntil: string | null;
   sentAt: string | null;
   versionNumber: number;
+  /** `PORTAL` when the customer raised it themselves from the storefront. */
+  source: string;
   createdAt: string;
   updatedAt: string;
   customer: {

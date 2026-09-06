@@ -51,6 +51,7 @@ const LIST_SELECT = {
   validUntil: true,
   sentAt: true,
   versionNumber: true,
+  source: true,
   createdAt: true,
   updatedAt: true,
   customer: {

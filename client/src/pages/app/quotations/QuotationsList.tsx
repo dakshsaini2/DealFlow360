@@ -205,6 +205,13 @@ export default function QuotationsList() {
                           {quote._count.lines} line{quote._count.lines === 1 ? '' : 's'} · v
                           {quote.versionNumber}
                         </p>
+                        {/* A request the customer raised needs pricing, so it
+                            is worth spotting in a list of the rep's own drafts. */}
+                        {quote.source === 'PORTAL' && (
+                          <span className="mt-1 inline-block">
+                            <Badge tone="brand">customer request</Badge>
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-[13px] text-slate-700">
                         {quote.customer.name}
