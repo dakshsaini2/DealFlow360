@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Check, Copy } from 'lucide-react';
 import {
   Button,
   ErrorBanner,
   Modal,
   SelectField,
+  TextAreaField,
   TextField,
 } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
@@ -16,6 +18,25 @@ import {
   type CustomerTier,
 } from '../../../util/customers';
 import { useAuth } from '../../../hooks/useAuth';
+import {
+  email,
+  maxLength,
+  minLength,
+  phone,
+  required,
+  useValidation,
+} from '../../../util/validation';
+
+/** Mirrors the Zod bounds the customers API validates against. */
+const RULES = {
+  name: [required('A company name'), minLength(2, 'A company name'), maxLength(200, 'A company name')],
+  email: [email(), maxLength(254, 'The email address')],
+  phone: [phone(), maxLength(40, 'A phone number')],
+  billingAddress: [maxLength(400, 'The billing address')],
+  shippingAddress: [maxLength(400, 'The shipping address')],
+};
+
+type FieldName = keyof typeof RULES;
 
 type Props = {
   tiers: CustomerTier[];
@@ -39,19 +60,39 @@ export default function CustomerFormModal({ tiers, customer, onClose, onSaved }:
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation<FieldName>(RULES);
 
   function set<K extends keyof CustomerInput>(key: K, value: CustomerInput[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function handleCopyBillingToShipping() {
+    if (!form.billingAddress?.trim()) return;
+    set('shippingAddress', form.billingAddress.trim());
+    clearError('shippingAddress');
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  /** Text field wiring: clear the error while typing, re-check on blur. */
+  function fieldProps(key: FieldName) {
+    return {
+      error: errors[key],
+      onBlur: () => validateField(key, form[key] ?? ''),
+      onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        clearError(key);
+        set(key, event.target.value);
+      },
+    };
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (!form.name?.trim()) {
-      return setError('Please enter a company name.');
-    }
-
     setError('');
+
+    if (!validateAll(form as Partial<Record<FieldName, string>>)) return;
+
     setSaving(true);
 
     // The server rejects empty strings for optional fields, and only accepts a
@@ -80,7 +121,7 @@ export default function CustomerFormModal({ tiers, customer, onClose, onSaved }:
   }
 
   return (
-    <Modal title={customer ? 'Edit customer' : 'New customer'} onClose={onClose}>
+    <Modal title={customer ? 'Edit customer' : 'New customer'} onClose={onClose} width="xl">
       <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-5" noValidate>
         {error && <ErrorBanner message={error} />}
 
@@ -89,9 +130,9 @@ export default function CustomerFormModal({ tiers, customer, onClose, onSaved }:
           label="Company name"
           placeholder="Northwind Logistics"
           value={form.name}
-          onChange={(e) => set('name', e.target.value)}
           disabled={saving}
           required
+          {...fieldProps('name')}
         />
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -99,18 +140,23 @@ export default function CustomerFormModal({ tiers, customer, onClose, onSaved }:
             id="customer-email"
             label="Email"
             type="email"
+            inputMode="email"
+            autoComplete="email"
             placeholder="ap@company.com"
             value={form.email ?? ''}
-            onChange={(e) => set('email', e.target.value)}
             disabled={saving}
+            {...fieldProps('email')}
           />
           <TextField
             id="customer-phone"
             label="Phone"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
             placeholder="+1-555-0100"
             value={form.phone ?? ''}
-            onChange={(e) => set('phone', e.target.value)}
             disabled={saving}
+            {...fieldProps('phone')}
           />
         </div>
 
@@ -135,22 +181,50 @@ export default function CustomerFormModal({ tiers, customer, onClose, onSaved }:
           ))}
         </SelectField>
 
-        <TextField
+        <TextAreaField
           id="customer-billing"
           label="Billing address"
-          placeholder="1 Market St, Springfield"
+          placeholder={'1 Market St\nSuite 400\nSpringfield, IL 62701'}
+          rows={4}
+          maxLength={400}
+          autoComplete="billing street-address"
           value={form.billingAddress ?? ''}
-          onChange={(e) => set('billingAddress', e.target.value)}
           disabled={saving}
+          {...fieldProps('billingAddress')}
         />
 
-        <TextField
+        <TextAreaField
           id="customer-shipping"
           label="Shipping address"
-          placeholder="1 Market St, Springfield"
+          action={
+            <button
+              type="button"
+              id="customer-same-address-btn"
+              onClick={handleCopyBillingToShipping}
+              disabled={saving || !form.billingAddress?.trim()}
+              className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-700 shadow-xs transition-colors hover:border-brand-300 hover:bg-slate-50 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Copy billing address to shipping address"
+            >
+              {copied ? (
+                <>
+                  <Check size={13} className="text-emerald-600" />
+                  <span className="font-semibold text-emerald-700">Copied from billing!</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={13} className="text-brand-600" />
+                  <span>Same as billing address</span>
+                </>
+              )}
+            </button>
+          }
+          placeholder={'Where the goods go, if it differs from billing'}
+          rows={4}
+          maxLength={400}
+          autoComplete="shipping street-address"
           value={form.shippingAddress ?? ''}
-          onChange={(e) => set('shippingAddress', e.target.value)}
           disabled={saving}
+          {...fieldProps('shippingAddress')}
         />
 
         <div className="mt-1 flex justify-end gap-2">

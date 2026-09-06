@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, CornerUpLeft, ShieldCheck, X } from 'lucide-react';
-import { Badge, Button, Card, ErrorBanner, Spinner } from '../../../components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  ErrorBanner,
+  Spinner,
+  TextAreaField,
+} from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
+import { firstError, maxLength, required } from '../../../util/validation';
 import {
   INSTANCE_TONE,
   STEP_STATE_TONE,
@@ -11,6 +19,14 @@ import {
   type ApprovalActionType,
   type ApprovalDetail,
 } from '../../../util/approvals';
+
+/**
+ * Mirrors `approvalActionSchema`: the note is capped at 1000 either way, but
+ * rejecting or returning cannot leave it empty — the rep needs to be told what
+ * to change.
+ */
+const REASON_RULES = [required('A reason'), maxLength(1000, 'A reason')];
+const COMMENT_RULES = [maxLength(1000, 'A comment')];
 
 /**
  * The approval chain for this quotation: which steps exist, who signed and
@@ -31,6 +47,7 @@ export default function ApprovalPanel({
   const [error, setError] = useState('');
   const [pendingAction, setPendingAction] = useState<ApprovalActionType | null>(null);
   const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(
@@ -60,9 +77,18 @@ export default function ApprovalPanel({
     // Rejecting or returning needs a reason, so those open a box first.
     if (action !== 'APPROVE' && pendingAction !== action) {
       setPendingAction(action);
+      setReasonError('');
       return;
     }
 
+    const invalid = firstError(reason, action === 'APPROVE' ? COMMENT_RULES : REASON_RULES);
+
+    if (invalid) {
+      setReasonError(invalid);
+      return;
+    }
+
+    setReasonError('');
     setBusy(true);
     setError('');
 
@@ -79,6 +105,7 @@ export default function ApprovalPanel({
       );
       setPendingAction(null);
       setReason('');
+      setReasonError('');
       onDecided();
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not record that decision.'));
@@ -186,23 +213,21 @@ export default function ApprovalPanel({
         {canAct ? (
           <div className="flex flex-col gap-3 border-t border-slate-100 pt-4">
             {pendingAction && (
-              <div className="flex flex-col gap-1.5">
-                <label
-                  htmlFor="approval-reason"
-                  className="text-[12px] font-medium text-slate-600"
-                >
-                  Reason for {pendingAction === 'REJECT' ? 'rejecting' : 'returning'} (required)
-                </label>
-                <textarea
-                  id="approval-reason"
-                  rows={3}
-                  autoFocus
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Tell the rep what needs to change…"
-                  className="w-full resize-y rounded-xl border border-slate-200 px-3.5 py-2.5 text-[13px] outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
-                />
-              </div>
+              <TextAreaField
+                id="approval-reason"
+                label={`Reason for ${pendingAction === 'REJECT' ? 'rejecting' : 'returning'}`}
+                rows={3}
+                autoFocus
+                maxLength={1000}
+                value={reason}
+                error={reasonError}
+                onChange={(e) => {
+                  setReasonError('');
+                  setReason(e.target.value);
+                }}
+                onBlur={() => setReasonError(firstError(reason, REASON_RULES) ?? '')}
+                placeholder="Tell the rep what needs to change…"
+              />
             )}
 
             <div className="flex flex-wrap gap-2">
@@ -215,7 +240,7 @@ export default function ApprovalPanel({
               <Button
                 variant={pendingAction === 'RETURN' ? 'primary' : 'secondary'}
                 onClick={() => submit('RETURN')}
-                disabled={busy || (pendingAction === 'RETURN' && reason.trim() === '')}
+                disabled={busy}
                 loading={busy && pendingAction === 'RETURN'}
               >
                 <CornerUpLeft size={15} />
@@ -224,7 +249,7 @@ export default function ApprovalPanel({
               <Button
                 variant={pendingAction === 'REJECT' ? 'danger' : 'secondary'}
                 onClick={() => submit('REJECT')}
-                disabled={busy || (pendingAction === 'REJECT' && reason.trim() === '')}
+                disabled={busy}
                 loading={busy && pendingAction === 'REJECT'}
               >
                 <X size={15} />
@@ -236,6 +261,7 @@ export default function ApprovalPanel({
                   onClick={() => {
                     setPendingAction(null);
                     setReason('');
+                    setReasonError('');
                   }}
                   disabled={busy}
                 >

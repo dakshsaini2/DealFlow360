@@ -4,12 +4,49 @@ import { AlertCircle, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   icon: ComponentType<{ size?: number; className?: string }>;
+  /** When set, the input turns red and this shows underneath. */
+  error?: string;
 };
 
 const inputClasses =
-  'w-full pl-11 pr-4 py-3 text-[15px] text-slate-800 bg-white border border-slate-200 rounded-xl outline-none transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 disabled:bg-slate-50 disabled:text-slate-400';
+  'w-full pl-11 pr-4 py-3 text-[15px] text-slate-800 bg-white border rounded-xl outline-none transition-all duration-200 placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-400';
 
-export function Field({ label, icon: Icon, id, ...props }: FieldProps) {
+const TONE_NORMAL =
+  'border-slate-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10';
+const TONE_INVALID = 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10';
+
+function fieldClasses(error?: string) {
+  return `${inputClasses} ${error ? TONE_INVALID : TONE_NORMAL}`;
+}
+
+/**
+ * The line under an auth field. `role="alert"` so the failure is announced as
+ * soon as it appears rather than only being visible.
+ */
+function FieldMessage({ id, hint, error }: { id?: string; hint?: string; error?: string }) {
+  if (error) {
+    return (
+      <p id={id && `${id}-error`} role="alert" className="text-[12px] font-medium text-red-600">
+        {error}
+      </p>
+    );
+  }
+
+  return hint ? (
+    <p id={id && `${id}-hint`} className="text-[12px] text-slate-400">
+      {hint}
+    </p>
+  ) : null;
+}
+
+function describedBy(id?: string, hint?: string, error?: string) {
+  if (!id) return undefined;
+  if (error) return `${id}-error`;
+
+  return hint ? `${id}-hint` : undefined;
+}
+
+export function Field({ label, icon: Icon, id, error, hint, ...props }: FieldProps & { hint?: string }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-[13px] font-medium text-slate-700">
@@ -17,13 +54,27 @@ export function Field({ label, icon: Icon, id, ...props }: FieldProps) {
       </label>
       <div className="relative">
         <Icon size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input id={id} className={inputClasses} {...props} />
+        <input
+          id={id}
+          className={fieldClasses(error)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy(id, hint, error)}
+          {...props}
+        />
       </div>
+      <FieldMessage id={id} hint={hint} error={error} />
     </div>
   );
 }
 
-export function PasswordField({ label, icon: Icon, id, hint, ...props }: FieldProps & { hint?: string }) {
+export function PasswordField({
+  label,
+  icon: Icon,
+  id,
+  hint,
+  error,
+  ...props
+}: FieldProps & { hint?: string }) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -33,7 +84,14 @@ export function PasswordField({ label, icon: Icon, id, hint, ...props }: FieldPr
       </label>
       <div className="relative">
         <Icon size={17} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input id={id} type={visible ? 'text' : 'password'} className={`${inputClasses} pr-11`} {...props} />
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          className={`${fieldClasses(error)} pr-11`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy(id, hint, error)}
+          {...props}
+        />
         <button
           type="button"
           onClick={() => setVisible(!visible)}
@@ -43,7 +101,7 @@ export function PasswordField({ label, icon: Icon, id, hint, ...props }: FieldPr
           {visible ? <EyeOff size={17} /> : <Eye size={17} />}
         </button>
       </div>
-      {hint && <p className="text-[12px] text-slate-400">{hint}</p>}
+      <FieldMessage id={id} hint={hint} error={error} />
     </div>
   );
 }

@@ -5,6 +5,9 @@ import AuthLayout from '../../components/auth/AuthLayout';
 import { Field, FormError, SubmitButton } from '../../components/auth/AuthForm';
 import { getApiErrorMessage } from '../../util/api';
 import { fetchOutbox, forgotPassword } from '../../util/account';
+import { email as emailRule, required, useValidation } from '../../util/validation';
+
+const RULES = { email: [required('An email address'), emailRule()] };
 
 /**
  * Asking for a reset link.
@@ -20,6 +23,7 @@ export default function ForgotPassword() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [devLink, setDevLink] = useState<string | null>(null);
+  const { errors, validateField, validateAll, clearError } = useValidation<'email'>(RULES);
 
   // Without SMTP the mail is captured, so surface the link rather than leaving
   // a developer with no way through.
@@ -43,6 +47,9 @@ export default function ForgotPassword() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
+
+    if (!validateAll({ email })) return;
+
     setLoading(true);
 
     try {
@@ -102,7 +109,7 @@ export default function ForgotPassword() {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
           {error && <FormError message={error} />}
 
           <Field
@@ -111,7 +118,12 @@ export default function ForgotPassword() {
             icon={Mail}
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              clearError('email');
+              setEmail(e.target.value);
+            }}
+            onBlur={() => validateField('email', email)}
+            error={errors.email}
             placeholder="you@company.com"
             autoComplete="email"
             required

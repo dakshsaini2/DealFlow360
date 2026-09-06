@@ -11,6 +11,10 @@ import {
   resolveCounterOffer,
   type NegotiationThread,
 } from '../../../util/negotiation';
+import { firstError, maxLength, required } from '../../../util/validation';
+
+/** Mirrors `lineCommentSchema`: something has to be said, and not more than 2000. */
+const REPLY_RULES = [required('A reply'), maxLength(2000, 'A reply')];
 
 /**
  * The seller's side of the portal conversation.
@@ -33,6 +37,7 @@ export default function NegotiationPanel({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
+  const [draftError, setDraftError] = useState('');
   const [unavailable, setUnavailable] = useState(false);
 
   const load = useCallback(
@@ -283,26 +288,75 @@ export default function NegotiationPanel({
           </div>
         )}
 
-        <div className="flex gap-2">
-          <input
+        <div className="flex flex-col gap-2">
+          <textarea
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            rows={3}
+            onChange={(e) => {
+              setDraftError('');
+              setDraft(e.target.value);
+            }}
+            onBlur={() => setDraftError(firstError(draft, REPLY_RULES) ?? '')}
+            maxLength={2000}
+            aria-invalid={draftError ? true : undefined}
+            aria-describedby={draftError ? 'negotiation-reply-error' : undefined}
             placeholder="Reply to the customer…"
             aria-label="Reply to the customer"
-            className="min-w-0 flex-1 rounded-xl border border-slate-200 px-3.5 py-2.5 text-[13px] outline-none placeholder:text-slate-400 focus:border-brand-500"
+            className={`w-full resize-y rounded-xl border px-3.5 py-2.5 text-[13px] leading-relaxed outline-none placeholder:text-slate-400 ${
+              draftError
+                ? 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10'
+                : 'border-slate-200 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10'
+            }`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                const invalid = firstError(draft, REPLY_RULES);
+                if (invalid) {
+                  setDraftError(invalid);
+                  return;
+                }
+                setDraftError('');
+                run(async () => {
+                  await postReply(quotationId, { comment: draft.trim() });
+                  setDraft('');
+                });
+              }
+            }}
           />
-          <Button
-            disabled={busy || draft.trim().length === 0}
-            onClick={() =>
-              run(async () => {
-                await postReply(quotationId, { comment: draft.trim() });
-                setDraft('');
-              })
-            }
-          >
-            <Send size={14} />
-            Send
-          </Button>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-400">
+              {draft.length > 0 ? `${draft.length}/2000 · Ctrl+Enter to send` : 'Up to 2000 characters'}
+            </span>
+            <Button
+              disabled={busy}
+              onClick={() => {
+                const invalid = firstError(draft, REPLY_RULES);
+
+                if (invalid) {
+                  setDraftError(invalid);
+                  return;
+                }
+
+                setDraftError('');
+                run(async () => {
+                  await postReply(quotationId, { comment: draft.trim() });
+                  setDraft('');
+                });
+              }}
+            >
+              <Send size={14} />
+              Send reply
+            </Button>
+          </div>
+          {draftError && (
+            <p
+              id="negotiation-reply-error"
+              role="alert"
+              className="text-[12px] font-medium text-red-600"
+            >
+              {draftError}
+            </p>
+          )}
         </div>
       </div>
     </Card>

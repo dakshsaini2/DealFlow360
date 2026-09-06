@@ -1,4 +1,10 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 /* ── Buttons ────────────────────────────────────────── */
@@ -33,44 +39,173 @@ export function Button({ variant = 'primary', loading, children, className = '',
 /* ── Form fields ────────────────────────────────────── */
 
 const CONTROL_CLASSES =
-  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-[14px] text-slate-800 outline-none transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10 disabled:bg-slate-50 disabled:text-slate-400';
+  'w-full rounded-xl border bg-white px-3.5 py-2.5 text-[14px] text-slate-800 outline-none transition-all duration-200 placeholder:text-slate-400 disabled:bg-slate-50 disabled:text-slate-400';
 
-type LabelledProps = { label: string; hint?: string; id: string };
+const CONTROL_TONES = {
+  normal: 'border-slate-200 hover:border-slate-300 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10',
+  invalid: 'border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-500/10',
+} as const;
+
+function controlClasses(error?: string) {
+  return `${CONTROL_CLASSES} ${error ? CONTROL_TONES.invalid : CONTROL_TONES.normal}`;
+}
+
+type LabelledProps = {
+  label: string;
+  action?: ReactNode;
+  hint?: string;
+  id: string;
+  /** When set, the control turns red and this replaces the hint. */
+  error?: string;
+};
+
+/**
+ * The message under a field. It is `role="alert"` so a screen reader announces
+ * a validation failure the moment it appears, and `aria-describedby` on the
+ * control ties the two together.
+ */
+function FieldMessage({ id, hint, error }: { id: string; hint?: string; error?: string }) {
+  if (error) {
+    return (
+      <p id={`${id}-error`} role="alert" className="text-[12px] font-medium text-red-600">
+        {error}
+      </p>
+    );
+  }
+
+  return hint ? (
+    <p id={`${id}-hint`} className="text-[12px] text-slate-400">
+      {hint}
+    </p>
+  ) : null;
+}
+
+function describedBy(id: string, hint?: string, error?: string) {
+  if (error) return `${id}-error`;
+
+  return hint ? `${id}-hint` : undefined;
+}
 
 export function TextField({
   label,
+  action,
   hint,
   id,
+  error,
   ...props
 }: LabelledProps & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-medium text-slate-700">
-        {label}
-      </label>
-      <input id={id} className={CONTROL_CLASSES} {...props} />
-      {hint && <p className="text-[12px] text-slate-400">{hint}</p>}
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="text-[13px] font-medium text-slate-700">
+          {label}
+        </label>
+        {action}
+      </div>
+      <input
+        id={id}
+        className={controlClasses(error)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, hint, error)}
+        {...props}
+      />
+      <FieldMessage id={id} hint={hint} error={error} />
+    </div>
+  );
+}
+
+/**
+ * A multi-line field. Addresses use this rather than `TextField`, since a
+ * street address on one line is unreadable the moment it is longer than the box.
+ */
+export function TextAreaField({
+  label,
+  action,
+  hint,
+  id,
+  error,
+  rows = 3,
+  className = '',
+  ...props
+}: LabelledProps & TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="text-[13px] font-medium text-slate-700">
+          {label}
+        </label>
+        {action}
+      </div>
+      <textarea
+        id={id}
+        rows={rows}
+        className={`${controlClasses(error)} min-h-[96px] resize-y leading-relaxed ${className}`}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, hint, error)}
+        {...props}
+      />
+      <FieldMessage id={id} hint={hint} error={error} />
     </div>
   );
 }
 
 export function SelectField({
   label,
+  action,
   hint,
   id,
+  error,
   children,
   ...props
 }: LabelledProps & SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-[13px] font-medium text-slate-700">
-        {label}
-      </label>
-      <select id={id} className={`${CONTROL_CLASSES} cursor-pointer`} {...props}>
+      <div className="flex items-center justify-between gap-2">
+        <label htmlFor={id} className="text-[13px] font-medium text-slate-700">
+          {label}
+        </label>
+        {action}
+      </div>
+      <select
+        id={id}
+        className={`${controlClasses(error)} cursor-pointer`}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, hint, error)}
+        {...props}
+      >
         {children}
       </select>
-      {hint && <p className="text-[12px] text-slate-400">{hint}</p>}
+      <FieldMessage id={id} hint={hint} error={error} />
     </div>
+  );
+}
+
+/**
+ * A checkbox with its label to the right. Used for "same as billing" and other
+ * inline switches inside a form column.
+ */
+export function CheckboxField({
+  id,
+  label,
+  description,
+  ...props
+}: { id: string; label: string; description?: string } & InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <label
+      htmlFor={id}
+      className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 px-3.5 py-2.5 transition-colors hover:border-slate-300"
+    >
+      <input
+        id={id}
+        type="checkbox"
+        className="mt-0.5 cursor-pointer accent-brand-600"
+        {...props}
+      />
+      <span>
+        <span className="block text-[13px] font-medium text-slate-800">{label}</span>
+        {description && <span className="block text-[12px] text-slate-500">{description}</span>}
+      </span>
+    </label>
   );
 }
 
@@ -142,8 +277,26 @@ export function PageHeader({ title, subtitle, action }: { title: string; subtitl
   );
 }
 
+const MODAL_WIDTHS = {
+  md: 'max-w-lg',
+  lg: 'max-w-2xl',
+  xl: 'max-w-3xl',
+  '2xl': 'max-w-4xl',
+} as const;
+
 /** Centred overlay dialog. Escape/backdrop close is handled by the caller. */
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  width = 'md',
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+  /** `lg` and `xl` give multi-line fields such as addresses room to breathe. */
+  width?: keyof typeof MODAL_WIDTHS;
+}) {
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center overflow-y-auto bg-slate-900/40 p-4 sm:items-center">
       <button type="button" aria-label="Close" onClick={onClose} className="fixed inset-0 border-none bg-transparent" />
@@ -151,7 +304,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-xl"
+        className={`relative z-10 w-full ${MODAL_WIDTHS[width]} rounded-2xl border border-slate-200 bg-white shadow-xl`}
       >
         <h2 className="border-b border-slate-100 px-5 py-4 text-[16px] font-semibold text-slate-900">{title}</h2>
         {children}

@@ -3,8 +3,15 @@ import { Search } from 'lucide-react';
 import { Badge, Button, ErrorBanner, Modal, Spinner } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
 import { currency, fetchProducts, type ProductSummary } from '../../../util/catalog';
+import { firstError, numeric, required } from '../../../util/validation';
 
 const DEBOUNCE_MS = 300;
+
+/** Matches the line schema: a positive whole number, capped where the API caps it. */
+const QUANTITY_RULES = [
+  required('A quantity'),
+  numeric({ min: 1, max: 1_000_000, integer: true, label: 'The quantity' }),
+];
 
 export default function AddLineModal({
   onClose,
@@ -45,12 +52,24 @@ export default function AddLineModal({
     return () => controller.abort();
   }, [query]);
 
+  /** The typed quantity for a row, or null when it is unusable. */
+  function quantityError(product: ProductSummary) {
+    return firstError(quantities[product.id] ?? '1', QUANTITY_RULES);
+  }
+
   async function handlePick(product: ProductSummary) {
+    const invalid = quantityError(product);
+
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+
     setAdding(product.id);
     setError('');
 
     try {
-      await onPick(product, Number(quantities[product.id] ?? 1) || 1);
+      await onPick(product, Number(quantities[product.id] ?? 1));
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not add that line.'));
     } finally {
@@ -83,35 +102,48 @@ export default function AddLineModal({
             <p className="px-4 py-10 text-center text-[13px] text-slate-400">No products found.</p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {products.map((product) => (
-                <li key={product.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-medium text-slate-900">{product.name}</p>
-                    <p className="text-[12px] text-slate-400">
-                      {product.sku} · {product.category.name} · {currency.format(product.basePrice)}
-                    </p>
-                  </div>
-                  {product.isRecurringCapable && <Badge tone="brand">Recurring</Badge>}
-                  <input
-                    type="number"
-                    min={1}
-                    aria-label={`Quantity for ${product.name}`}
-                    value={quantities[product.id] ?? '1'}
-                    onChange={(e) =>
-                      setQuantities((current) => ({ ...current, [product.id]: e.target.value }))
-                    }
-                    className="w-16 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-[13px] outline-none focus:border-brand-500"
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={() => handlePick(product)}
-                    loading={adding === product.id}
-                    disabled={adding !== null}
-                  >
-                    Add
-                  </Button>
-                </li>
-              ))}
+              {products.map((product) => {
+                const invalid = quantityError(product);
+
+                return (
+                  <li key={product.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[14px] font-medium text-slate-900">
+                        {product.name}
+                      </p>
+                      <p className="text-[12px] text-slate-400">
+                        {product.sku} · {product.category.name} ·{' '}
+                        {currency.format(product.basePrice)}
+                      </p>
+                    </div>
+                    {product.isRecurringCapable && <Badge tone="brand">Recurring</Badge>}
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      aria-label={`Quantity for ${product.name}`}
+                      aria-invalid={invalid ? true : undefined}
+                      value={quantities[product.id] ?? '1'}
+                      onChange={(e) =>
+                        setQuantities((current) => ({ ...current, [product.id]: e.target.value }))
+                      }
+                      className={`w-16 rounded-lg border px-2 py-1.5 text-center text-[13px] outline-none ${
+                        invalid
+                          ? 'border-red-300 focus:border-red-500'
+                          : 'border-slate-200 focus:border-brand-500'
+                      }`}
+                    />
+                    <Button
+                      variant="secondary"
+                      onClick={() => handlePick(product)}
+                      loading={adding === product.id}
+                      disabled={adding !== null || invalid !== null}
+                    >
+                      Add
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

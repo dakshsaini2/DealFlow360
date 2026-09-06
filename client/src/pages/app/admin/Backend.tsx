@@ -14,11 +14,13 @@ import {
   Badge,
   Button,
   Card,
+  CheckboxField,
   ErrorBanner,
   Modal,
   PageHeader,
   SelectField,
   Spinner,
+  TextAreaField,
   TextField,
 } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
@@ -45,6 +47,16 @@ import {
   type AdminWarehouse,
   type Governance,
 } from '../../../util/admin';
+import {
+  firstError,
+  maxLength,
+  minLength,
+  numeric,
+  pattern,
+  percent,
+  required,
+  useValidation,
+} from '../../../util/validation';
 
 type Tab = 'warehouses' | 'plans' | 'discounts' | 'thresholds';
 
@@ -381,35 +393,58 @@ function WeightField({
   onError: (message: string) => void;
 }) {
   const [value, setValue] = useState(String(warehouse.shippingCostWeight));
+  const [invalid, setInvalid] = useState<string | null>(null);
 
   useEffect(() => setValue(String(warehouse.shippingCostWeight)), [warehouse.shippingCostWeight]);
 
   return (
-    <input
-      type="number"
-      min={0.1}
-      max={10}
-      step={0.1}
-      value={value}
-      aria-label={`Shipping weight for ${warehouse.code}`}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={async () => {
-        const next = Number(value);
+    <div className="flex flex-col items-center gap-1">
+      <input
+        type="number"
+        min={0.1}
+        max={10}
+        step={0.1}
+        value={value}
+        aria-label={`Shipping weight for ${warehouse.code}`}
+        aria-invalid={invalid ? true : undefined}
+        onChange={(e) => {
+          setInvalid(null);
+          setValue(e.target.value);
+        }}
+        onBlur={async () => {
+          // A bad entry is called out rather than silently reverted, so a typo
+          // does not look like the save quietly succeeded.
+          const message = firstError(value, [
+            required('A weight'),
+            numeric({ min: 0.1, max: 10, label: 'The weight' }),
+          ]);
 
-        if (!Number.isFinite(next) || next === warehouse.shippingCostWeight) {
-          setValue(String(warehouse.shippingCostWeight));
-          return;
-        }
+          if (message) {
+            setInvalid(message);
+            return;
+          }
 
-        try {
-          onSaved(await updateWarehouse(warehouse.id, { shippingCostWeight: next }));
-        } catch (err) {
-          onError(getApiErrorMessage(err, 'That weight could not be saved.'));
-          setValue(String(warehouse.shippingCostWeight));
-        }
-      }}
-      className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-[13px] outline-none focus:border-brand-500"
-    />
+          const next = Number(value);
+
+          if (next === warehouse.shippingCostWeight) return;
+
+          try {
+            onSaved(await updateWarehouse(warehouse.id, { shippingCostWeight: next }));
+          } catch (err) {
+            onError(getApiErrorMessage(err, 'That weight could not be saved.'));
+            setValue(String(warehouse.shippingCostWeight));
+          }
+        }}
+        className={`w-20 rounded-lg border px-2 py-1.5 text-center text-[13px] outline-none ${
+          invalid ? 'border-red-300 focus:border-red-500' : 'border-slate-200 focus:border-brand-500'
+        }`}
+      />
+      {invalid && (
+        <p role="alert" className="text-[11px] font-medium text-red-600">
+          {invalid}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -430,29 +465,61 @@ function WarehouseDialog({
   const [address, setAddress] = useState('');
   const [weight, setWeight] = useState('1');
   const [busy, setBusy] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    code: [
+      required('A code'),
+      minLength(2, 'A code'),
+      maxLength(20, 'A code'),
+      pattern(/^[A-Z0-9-]+$/, 'A code can only contain letters, numbers and hyphens.'),
+    ],
+    name: [required('A name'), minLength(2, 'A name'), maxLength(120, 'A name')],
+    address: [maxLength(400, 'The address')],
+    weight: [
+      required('A shipping weight'),
+      numeric({ min: 0.1, max: 10, label: 'The shipping weight' }),
+    ],
+  });
 
   return (
-    <Modal title="New warehouse" onClose={onClose}>
+    <Modal title="New warehouse" onClose={onClose} width="xl">
       <div className="flex flex-col gap-4 p-5">
         <TextField
           id="wh-code"
           label="Code"
           value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          onChange={(e) => {
+            clearError('code');
+            setCode(e.target.value.toUpperCase());
+          }}
+          onBlur={() => validateField('code', code)}
+          error={errors.code}
           placeholder="WH-NORTH"
         />
         <TextField
           id="wh-name"
           label="Name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            clearError('name');
+            setName(e.target.value);
+          }}
+          onBlur={() => validateField('name', name)}
+          error={errors.name}
           placeholder="Northern Depot"
         />
-        <TextField
+        <TextAreaField
           id="wh-address"
           label="Address"
+          rows={4}
+          maxLength={400}
+          placeholder={'12 Depot Road\nUnit 3\nSpringfield, IL 62701'}
           value={address}
-          onChange={(e) => setAddress(e.target.value)}
+          onChange={(e) => {
+            clearError('address');
+            setAddress(e.target.value);
+          }}
+          onBlur={() => validateField('address', address)}
+          error={errors.address}
         />
         <TextField
           id="wh-weight"
@@ -462,7 +529,12 @@ function WarehouseDialog({
           max={10}
           step={0.1}
           value={weight}
-          onChange={(e) => setWeight(e.target.value)}
+          onChange={(e) => {
+            clearError('weight');
+            setWeight(e.target.value);
+          }}
+          onBlur={() => validateField('weight', weight)}
+          error={errors.weight}
           hint="1.0 is average. Lower is cheaper to ship from."
         />
         <div className="flex justify-end gap-2">
@@ -471,14 +543,15 @@ function WarehouseDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={code.trim().length < 2 || name.trim().length < 2}
             onClick={() => {
+              if (!validateAll({ code, name, address, weight })) return;
+
               setBusy(true);
               onSubmit({
                 code: code.trim(),
                 name: name.trim(),
                 address: address.trim() || undefined,
-                shippingCostWeight: Number(weight) || 1,
+                shippingCostWeight: Number(weight),
               });
             }}
           >
@@ -504,6 +577,13 @@ function StockDialog({
   const [productId, setProductId] = useState(products[0]?.id ?? '');
   const [quantity, setQuantity] = useState('100');
   const [busy, setBusy] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    productId: [required('A product')],
+    quantity: [
+      required('A quantity'),
+      numeric({ min: 0, max: 1_000_000, integer: true, label: 'The quantity' }),
+    ],
+  });
 
   return (
     <Modal title={`Set stock — ${warehouse.name}`} onClose={onClose}>
@@ -516,8 +596,13 @@ function StockDialog({
           id="stock-product"
           label="Product"
           value={productId}
-          onChange={(e) => setProductId(e.target.value)}
+          onChange={(e) => {
+            clearError('productId');
+            setProductId(e.target.value);
+          }}
+          error={errors.productId}
         >
+          <option value="">Choose a product…</option>
           {products.map((product) => (
             <option key={product.id} value={product.id}>
               {product.sku} — {product.name}
@@ -530,7 +615,12 @@ function StockDialog({
           type="number"
           min={0}
           value={quantity}
-          onChange={(e) => setQuantity(e.target.value)}
+          onChange={(e) => {
+            clearError('quantity');
+            setQuantity(e.target.value);
+          }}
+          onBlur={() => validateField('quantity', quantity)}
+          error={errors.quantity}
         />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -538,10 +628,11 @@ function StockDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={!productId}
             onClick={() => {
+              if (!validateAll({ productId, quantity })) return;
+
               setBusy(true);
-              onSubmit(productId, Number(quantity) || 0);
+              onSubmit(productId, Number(quantity));
             }}
           >
             Set stock
@@ -665,15 +756,28 @@ function PlanDialog({
   const [prorate, setProrate] = useState(true);
   const [policy, setPolicy] = useState('');
   const [busy, setBusy] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    name: [required('A name'), minLength(2, 'A name'), maxLength(60, 'A name')],
+    count: [
+      required('An interval count'),
+      numeric({ min: 1, max: 36, integer: true, label: 'The interval count' }),
+    ],
+    policy: [maxLength(400, 'The cancellation policy')],
+  });
 
   return (
-    <Modal title="New subscription plan" onClose={onClose}>
+    <Modal title="New subscription plan" onClose={onClose} width="lg">
       <div className="flex flex-col gap-4 p-5">
         <TextField
           id="plan-name"
           label="Name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            clearError('name');
+            setName(e.target.value);
+          }}
+          onBlur={() => validateField('name', name)}
+          error={errors.name}
           placeholder="Biannual"
         />
         <div className="grid grid-cols-2 gap-3">
@@ -695,31 +799,33 @@ function PlanDialog({
             min={1}
             max={36}
             value={count}
-            onChange={(e) => setCount(e.target.value)}
+            onChange={(e) => {
+              clearError('count');
+              setCount(e.target.value);
+            }}
+            onBlur={() => validateField('count', count)}
+            error={errors.count}
           />
         </div>
-        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 px-3.5 py-2.5">
-          <input
-            type="checkbox"
-            checked={prorate}
-            onChange={(e) => setProrate(e.target.checked)}
-            className="mt-1"
-          />
-          <span>
-            <span className="block text-[13px] font-medium text-slate-800">
-              Prorate mid-cycle changes
-            </span>
-            <span className="block text-[12px] text-slate-500">
-              A quantity change part-way through a period is charged or credited for the
-              remaining days.
-            </span>
-          </span>
-        </label>
-        <TextField
+        <CheckboxField
+          id="plan-prorate"
+          label="Prorate mid-cycle changes"
+          description="A quantity change part-way through a period is charged or credited for the remaining days."
+          checked={prorate}
+          onChange={(e) => setProrate(e.target.checked)}
+        />
+        <TextAreaField
           id="plan-policy"
           label="Cancellation policy"
+          rows={3}
+          maxLength={400}
           value={policy}
-          onChange={(e) => setPolicy(e.target.value)}
+          onChange={(e) => {
+            clearError('policy');
+            setPolicy(e.target.value);
+          }}
+          onBlur={() => validateField('policy', policy)}
+          error={errors.policy}
           placeholder="Cancel with 30 days notice."
         />
         <div className="flex justify-end gap-2">
@@ -728,13 +834,14 @@ function PlanDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={name.trim().length < 2}
             onClick={() => {
+              if (!validateAll({ name, count, policy })) return;
+
               setBusy(true);
               onSubmit({
                 name: name.trim(),
                 billingInterval: interval,
-                intervalCount: Number(count) || 1,
+                intervalCount: Number(count),
                 prorationEnabled: prorate,
                 cancellationPolicy: policy.trim() || undefined,
               });
@@ -936,38 +1043,58 @@ function CeilingField({
   onError: (message: string) => void;
 }) {
   const [draft, setDraft] = useState(String(value));
+  const [invalid, setInvalid] = useState<string | null>(null);
 
   useEffect(() => setDraft(String(value)), [value]);
 
   return (
-    <div className="flex items-center gap-1">
-      <input
-        type="number"
-        min={0}
-        max={100}
-        step={0.5}
-        value={draft}
-        aria-label="Tier default ceiling"
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={async () => {
-          const next = Number(draft);
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          max={100}
+          step={0.5}
+          value={draft}
+          aria-label="Tier default ceiling"
+          aria-invalid={invalid ? true : undefined}
+          onChange={(e) => {
+            setInvalid(null);
+            setDraft(e.target.value);
+          }}
+          onBlur={async () => {
+            const message = firstError(draft, [required('A ceiling'), percent('The ceiling')]);
 
-          if (!Number.isFinite(next) || next === value) {
-            setDraft(String(value));
-            return;
-          }
+            if (message) {
+              setInvalid(message);
+              return;
+            }
 
-          try {
-            await updateTier(tierId, { defaultDiscountCeiling: next });
-            onSaved(next);
-          } catch (err) {
-            onError(getApiErrorMessage(err, 'That ceiling could not be saved.'));
-            setDraft(String(value));
-          }
-        }}
-        className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-center text-[13px] outline-none focus:border-brand-500"
-      />
-      <span className="text-[13px] text-slate-400">%</span>
+            const next = Number(draft);
+
+            if (next === value) return;
+
+            try {
+              await updateTier(tierId, { defaultDiscountCeiling: next });
+              onSaved(next);
+            } catch (err) {
+              onError(getApiErrorMessage(err, 'That ceiling could not be saved.'));
+              setDraft(String(value));
+            }
+          }}
+          className={`w-20 rounded-lg border px-2 py-1.5 text-center text-[13px] outline-none ${
+            invalid
+              ? 'border-red-300 focus:border-red-500'
+              : 'border-slate-200 focus:border-brand-500'
+          }`}
+        />
+        <span className="text-[13px] text-slate-400">%</span>
+      </div>
+      {invalid && (
+        <p role="alert" className="text-[11px] font-medium text-red-600">
+          {invalid}
+        </p>
+      )}
     </div>
   );
 }
@@ -987,22 +1114,39 @@ function TierDialog({
   const [description, setDescription] = useState('');
   const [ceiling, setCeiling] = useState('10');
   const [busy, setBusy] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    name: [required('A name'), minLength(2, 'A name'), maxLength(40, 'A name')],
+    description: [maxLength(400, 'The description')],
+    ceiling: [required('A ceiling'), percent('The ceiling')],
+  });
 
   return (
-    <Modal title="New customer tier" onClose={onClose}>
+    <Modal title="New customer tier" onClose={onClose} width="lg">
       <div className="flex flex-col gap-4 p-5">
         <TextField
           id="tier-name"
           label="Name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            clearError('name');
+            setName(e.target.value);
+          }}
+          onBlur={() => validateField('name', name)}
+          error={errors.name}
           placeholder="Strategic"
         />
-        <TextField
+        <TextAreaField
           id="tier-description"
           label="Description"
+          rows={2}
+          maxLength={400}
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            clearError('description');
+            setDescription(e.target.value);
+          }}
+          onBlur={() => validateField('description', description)}
+          error={errors.description}
         />
         <TextField
           id="tier-ceiling"
@@ -1012,7 +1156,12 @@ function TierDialog({
           max={100}
           step={0.5}
           value={ceiling}
-          onChange={(e) => setCeiling(e.target.value)}
+          onChange={(e) => {
+            clearError('ceiling');
+            setCeiling(e.target.value);
+          }}
+          onBlur={() => validateField('ceiling', ceiling)}
+          error={errors.ceiling}
           hint="Used when no category rule is more specific."
         />
         <div className="flex justify-end gap-2">
@@ -1021,13 +1170,14 @@ function TierDialog({
           </Button>
           <Button
             loading={busy}
-            disabled={name.trim().length < 2}
             onClick={() => {
+              if (!validateAll({ name, description, ceiling })) return;
+
               setBusy(true);
               onSubmit({
                 name: name.trim(),
                 description: description.trim() || undefined,
-                defaultDiscountCeiling: Number(ceiling) || 0,
+                defaultDiscountCeiling: Number(ceiling),
               });
             }}
           >
@@ -1049,8 +1199,11 @@ function RuleDialog({
   onSubmit: (categoryId: string, maxDiscountPercent: number) => void;
 }) {
   const [categoryId, setCategoryId] = useState(categories[0]?.id ?? '');
-  const [percent, setPercent] = useState('15');
+  const [maxPercent, setMaxPercent] = useState('15');
   const [busy, setBusy] = useState(false);
+  const { errors, validateField, validateAll, clearError } = useValidation({
+    maxPercent: [required('A maximum discount'), percent('The maximum discount')],
+  });
 
   return (
     <Modal title="Category discount ceiling" onClose={onClose}>
@@ -1079,8 +1232,13 @@ function RuleDialog({
           min={0}
           max={100}
           step={0.5}
-          value={percent}
-          onChange={(e) => setPercent(e.target.value)}
+          value={maxPercent}
+          onChange={(e) => {
+            clearError('maxPercent');
+            setMaxPercent(e.target.value);
+          }}
+          onBlur={() => validateField('maxPercent', maxPercent)}
+          error={errors.maxPercent}
         />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
@@ -1089,8 +1247,10 @@ function RuleDialog({
           <Button
             loading={busy}
             onClick={() => {
+              if (!validateAll({ maxPercent })) return;
+
               setBusy(true);
-              onSubmit(categoryId, Number(percent) || 0);
+              onSubmit(categoryId, Number(maxPercent));
             }}
           >
             Save ceiling
@@ -1102,6 +1262,9 @@ function RuleDialog({
 }
 
 /* ── thresholds ───────────────────────────────────── */
+
+/** Every threshold is a number, so one rule set covers the whole list. */
+const THRESHOLD_RULES = [required('A value'), numeric({ min: 0, label: 'A threshold' })];
 
 function Thresholds({ onError, onNotice }: PanelProps) {
   const [settings, setSettings] = useState<AdminSetting[] | null>(null);
@@ -1120,6 +1283,12 @@ function Thresholds({ onError, onNotice }: PanelProps) {
   if (!settings) return <Spinner />;
 
   const changed = settings.filter((row) => draft[row.key] !== row.value);
+  // Only what has been edited is sent, so only that needs to be valid.
+  const invalid = new Map(
+    changed
+      .map((row) => [row.key, firstError(draft[row.key] ?? '', THRESHOLD_RULES)] as const)
+      .filter((entry): entry is readonly [string, string] => entry[1] !== null),
+  );
 
   return (
     <Card>
@@ -1133,7 +1302,7 @@ function Thresholds({ onError, onNotice }: PanelProps) {
         </div>
         <Button
           loading={busy}
-          disabled={changed.length === 0}
+          disabled={changed.length === 0 || invalid.size > 0}
           onClick={async () => {
             setBusy(true);
 
@@ -1168,20 +1337,30 @@ function Thresholds({ onError, onNotice }: PanelProps) {
                 {setting.isDefault ? '' : ' · overridden'}
               </p>
             </div>
-            <input
-              type="number"
-              step="any"
-              value={draft[setting.key] ?? ''}
-              aria-label={SETTING_LABELS[setting.key] ?? setting.key}
-              onChange={(e) =>
-                setDraft((current) => ({ ...current, [setting.key]: e.target.value }))
-              }
-              className={`w-28 rounded-lg border px-2.5 py-1.5 text-center text-[13px] outline-none focus:border-brand-500 ${
-                draft[setting.key] !== setting.value
-                  ? 'border-brand-300 bg-brand-50 font-semibold'
-                  : 'border-slate-200'
-              }`}
-            />
+            <div className="flex flex-col items-end gap-1">
+              <input
+                type="number"
+                step="any"
+                value={draft[setting.key] ?? ''}
+                aria-label={SETTING_LABELS[setting.key] ?? setting.key}
+                aria-invalid={invalid.has(setting.key) ? true : undefined}
+                onChange={(e) =>
+                  setDraft((current) => ({ ...current, [setting.key]: e.target.value }))
+                }
+                className={`w-28 rounded-lg border px-2.5 py-1.5 text-center text-[13px] outline-none ${
+                  invalid.has(setting.key)
+                    ? 'border-red-300 focus:border-red-500'
+                    : draft[setting.key] !== setting.value
+                      ? 'border-brand-300 bg-brand-50 font-semibold focus:border-brand-500'
+                      : 'border-slate-200 focus:border-brand-500'
+                }`}
+              />
+              {invalid.has(setting.key) && (
+                <p role="alert" className="text-[11px] font-medium text-red-600">
+                  {invalid.get(setting.key)}
+                </p>
+              )}
+            </div>
           </li>
         ))}
       </ul>

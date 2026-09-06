@@ -11,7 +11,9 @@ import {
   Modal,
   PageHeader,
   Spinner,
+  TextAreaField,
 } from '../../../components/ui';
+import { firstError, maxLength } from '../../../util/validation';
 import { getApiErrorMessage } from '../../../util/api';
 import { currency } from '../../../util/catalog';
 import { humanStatus } from '../../../util/quotations';
@@ -362,26 +364,25 @@ function ActDialog({
             ? `A note goes onto the quotation thread for ${alert.quotation.salesRep.firstName}, and this alert closes.`
             : `The deal is escalated to management and a note is posted on the quotation thread. This alert closes.`}
         </p>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="alert-note" className="text-[13px] font-medium text-slate-700">
-            Note (optional)
-          </label>
-          <textarea
-            id="alert-note"
-            rows={3}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="What should happen next?"
-            className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-[14px] outline-none placeholder:text-slate-400 focus:border-brand-500"
-          />
-        </div>
+        <TextAreaField
+          id="alert-note"
+          label="Note (optional)"
+          rows={3}
+          maxLength={1000}
+          value={note}
+          error={firstError(note, [maxLength(1000, 'The note')]) ?? undefined}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="What should happen next?"
+        />
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
           <Button
             loading={busy}
+            disabled={note.length > 1000}
             onClick={() => {
+              if (note.length > 1000) return;
               setBusy(true);
               onSubmit(note.trim() || undefined);
             }}
