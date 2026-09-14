@@ -260,4 +260,7 @@ export const SETTING_LABELS: Record<string, string> = {
   BACKORDER_RESTOCK_DAYS: 'Expected days until backordered stock arrives',
   BILLING_SCHEDULE_HORIZON: 'Billing periods scheduled ahead',
   INVOICE_DUE_DAYS: 'Days an invoice has to be paid',
+  BANDIT_EXPLORATION_EPSILON: 'Share of upsell panels shown at random, to keep learning',
+  BANDIT_LEARNING_RATE: 'Step size of the upsell policy',
+  BANDIT_WARMUP_UPDATES: 'Feedback events before the panel is ranked by the policy alone',
 };

@@ -847,11 +847,51 @@ model RecommendationEvent {
   action         String
   createdAt      DateTime @default(now())
 
+  // ── contextual bandit decision record (SHOWN rows only) ──
+  /** Probability this suggestion was shown under the exploring policy. */
+  probability  Decimal?  @db.Decimal(9, 6)
+  /** The exact hashed feature vector it was scored on, for honest replay. */
+  features     Json?
+  /** Observed cost once feedback arrived; null while still open. */
+  cost         Decimal?  @db.Decimal(6, 3)
+  /** Set when the policy trained on this row, so it trains at most once. */
+  learnedAt    DateTime?
+  /** How many updates the policy had made when it took this decision. */
+  modelUpdates Int?
+  /** True when the panel explored rather than followed its own ranking. */
+  wasExplored  Boolean   @default(false)
+
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([quotationId])
   @@index([productId])
+  /// Settling and re-showing both look for a quotation's still-open decisions.
+  @@index([quotationId, learnedAt])
+  /// The global settle sweep takes the oldest decisions still unlearned.
+  @@index([learnedAt, createdAt])
+}
+
+// ============================================================
+// 31b. BANDIT_MODELS
+// ============================================================
+
+/**
+ * The online policy behind the upsell panel. One row per named policy, holding
+ * the sparse weight vector and its AdaGrad accumulators, so learning survives
+ * a restart instead of starting cold every deploy.
+ */
+model BanditModel {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  /** hashed feature index -> [weight, sum of squared gradients]. */
+  weights   Json
+  bias      Float    @default(0)
+  biasGrad  Float    @default(0)
+  updates   Int      @default(0)
+  totalCost Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ============================================================

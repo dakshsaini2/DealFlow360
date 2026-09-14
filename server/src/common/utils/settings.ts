@@ -26,6 +26,20 @@ export const SETTING_DEFAULTS = {
   BILLING_SCHEDULE_HORIZON: "12",
   /** Days a new invoice is given to be paid. */
   INVOICE_DUE_DAYS: "30",
+  /**
+   * Share of upsell panels drawn at random rather than by the policy's own
+   * ranking. Exploration is what keeps the recommender learning; at 0 it can
+   * only ever confirm what it already believes.
+   */
+  BANDIT_EXPLORATION_EPSILON: "0.15",
+  /** AdaGrad step size for the upsell policy. */
+  BANDIT_LEARNING_RATE: "0.5",
+  /**
+   * Feedback events before the panel is ranked by the policy alone. Until then
+   * it is blended with the catalogue's own pairing scores, so a cold model
+   * cannot scramble the panel on its first few updates.
+   */
+  BANDIT_WARMUP_UPDATES: "50",
 } as const;
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

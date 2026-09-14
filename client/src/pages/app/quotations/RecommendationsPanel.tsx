@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Sparkles, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { Compass, Sparkles, TrendingDown, TrendingUp, X } from 'lucide-react';
 import { Badge, Button, Card, ErrorBanner, Spinner } from '../../../components/ui';
 import { getApiErrorMessage } from '../../../util/api';
 import { currency } from '../../../util/catalog';
@@ -8,6 +8,7 @@ import {
   acceptSuggestion,
   dismissSuggestion,
   fetchSuggestions,
+  type PolicyState,
   type QuotationResponse,
   type Suggestion,
 } from '../../../util/quotations';
@@ -30,6 +31,7 @@ export default function RecommendationsPanel({
   onAccepted: (result: QuotationResponse) => void;
 }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [policy, setPolicy] = useState<PolicyState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -41,6 +43,7 @@ export default function RecommendationsPanel({
       fetchSuggestions(quotationId, signal)
         .then((result) => {
           setSuggestions(result.suggestions);
+          setPolicy(result.policy);
           setLoading(false);
         })
         .catch((err) => {
@@ -79,6 +82,7 @@ export default function RecommendationsPanel({
     try {
       const result = await dismissSuggestion(quotationId, suggestion.productId);
       setSuggestions(result.suggestions);
+      setPolicy(result.policy);
     } catch (err) {
       setError(getApiErrorMessage(err, 'Could not dismiss that suggestion.'));
     } finally {
@@ -116,7 +120,31 @@ export default function RecommendationsPanel({
           ))
         )}
       </div>
+
+      {policy && policy.updates > 0 && <PolicyFooter policy={policy} />}
     </Card>
+  );
+}
+
+/**
+ * The panel learns from what reps do with it, so it is worth saying so: a rep
+ * who sees an odd suggestion should know it is the model exploring rather than
+ * the model being wrong, and that ignoring it is itself an answer.
+ */
+function PolicyFooter({ policy }: { policy: PolicyState }) {
+  const ranking =
+    policy.trust >= 1
+      ? 'ranked by what this panel has learned'
+      : `${Math.round(policy.trust * 100)}% learned, the rest catalogue pairings`;
+
+  return (
+    <div className="flex items-center gap-2 border-t border-slate-100 px-5 py-3 text-[11px] text-slate-400">
+      <Compass size={12} className="shrink-0" />
+      <span>
+        {ranking} · {policy.updates} decision{policy.updates === 1 ? '' : 's'} learned from ·
+        exploring {Math.round(policy.epsilon * 100)}% of panels
+      </span>
+    </div>
   );
 }
 
@@ -169,6 +197,15 @@ function SuggestionCard({
           <Badge tone="amber">
             {suggestion.promotion.name} · {suggestion.promotion.discountValue}% off
           </Badge>
+        )}
+        {suggestion.explored && (
+          <span
+            title="Shown to find out whether it works, not because it ranked highest. Taking or ignoring it both teach the panel."
+            className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500"
+          >
+            <Compass size={11} />
+            exploring
+          </span>
         )}
       </div>
 

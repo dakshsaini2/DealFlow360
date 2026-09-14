@@ -2,11 +2,13 @@ import { NotFoundError } from "../../common/errors/AppError.js";
 import { ForbiddenError } from "../../common/errors/AuthError.js";
 import { RECOMMENDATION_ACTION } from "../../common/constants/status.js";
 import { hasAnyRole, type AuthUser } from "../../common/types/auth.types.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../common/utils/prisma.js";
 import { round2 } from "../../common/utils/serialize.js";
 import { resolvePricing } from "../catalog/pricing.service.js";
 import { calculateRisk } from "../quotations/risk.service.js";
 import * as quotations from "../quotations/quotations.service.js";
+import * as bandit from "./bandit.service.js";
 import type { AcceptInput } from "./recommendations.types.js";
 
 /** How far a live promotion lifts a suggestion up the ranking. */
@@ -17,13 +19,21 @@ const PREVIEW_QUANTITY = 1;
 
 const MAX_SUGGESTIONS = 8;
 
+export type SuggestionsResult = {
+  suggestions: Suggestion[];
+  baseline: { riskScore: number; marginPercent: number | null };
+  /** How much the panel is the learned policy versus the catalogue heuristic. */
+  policy: bandit.PolicyState;
+};
+
 export type Suggestion = {
   productId: string;
   sku: string;
   name: string;
   categoryName: string;
   suggestionType: string;
-  /** Ranking strength, promotion boost included. */
+  /** Catalogue pairing strength, promotion boost included. One input to the
+   * ranking, not the ranking itself — see `policyScore`. */
   rank: number;
   score: number | null;
   /** Which cart lines triggered this suggestion. */
@@ -43,6 +53,13 @@ export type Suggestion = {
 
   promotion: { id: string; name: string; discountValue: number } | null;
   minimumMarginPercent: number | null;
+
+  /** What the learned policy alone thinks of this candidate, 0-1. */
+  policyScore: number;
+  /** Probability it was put on the panel — the `p` the IPS update divides by. */
+  probability: number;
+  /** True when it is here because the policy explored, not because it ranked. */
+  explored: boolean;
 };
 
 /**
@@ -57,13 +74,17 @@ export type Suggestion = {
 export async function getSuggestions(
   user: AuthUser,
   quotationId: string,
-): Promise<{ suggestions: Suggestion[]; baseline: { riskScore: number; marginPercent: number | null } }> {
+): Promise<SuggestionsResult> {
   const quotation = await loadQuotation(user, quotationId);
+
+  // Suggestions the rep neither took nor dismissed are real feedback too, and
+  // the policy has to see them or it only ever learns from the clicks.
+  await settleOpenDecisions();
 
   const inCart = new Set(quotation.lines.map((line) => line.productId));
 
   if (inCart.size === 0) {
-    return { suggestions: [], baseline: { riskScore: 0, marginPercent: null } };
+    return empty(await bandit.policyState());
   }
 
   const dismissed = await dismissedProductIds(quotationId);
@@ -118,7 +139,7 @@ export async function getSuggestions(
   const candidates = [...best.values()];
 
   if (candidates.length === 0) {
-    return { suggestions: [], baseline: { riskScore: 0, marginPercent: null } };
+    return empty(await bandit.policyState());
   }
 
   // Price the cart and every candidate in one call, then reuse the priced cart
@@ -147,8 +168,17 @@ export async function getSuggestions(
   const candidatePriced = pricing.lines.slice(cartLineCount);
   const baseline = calculateRisk(cartPriced);
 
-  const suggestions = candidates
-    .map((candidate, index) => {
+  const cartValue = cartPriced.reduce((sum, line) => sum + line.lineTotal, 0);
+  const context: bandit.Context = {
+    customerTier: pricing.customerTier?.name ?? "none",
+    cartLines: cartLineCount,
+    cartValue,
+    orderMarginPercent: baseline.marginPercent,
+    riskScore: baseline.score,
+  };
+
+  const eligible = candidates
+    .map((candidate, index): Suggestion | null => {
       const priced = candidatePriced[index]!;
       const promotion = promotions.get(candidate.targetProduct.id) ?? null;
 
@@ -193,17 +223,73 @@ export async function getSuggestions(
 
         promotion,
         minimumMarginPercent: floor,
+
+        // Filled in below, once the policy has scored the whole slate.
+        policyScore: 0,
+        probability: 1,
+        explored: false,
       } satisfies Suggestion;
     })
-    .filter((suggestion): suggestion is Suggestion => suggestion !== null)
-    .sort((a, b) => b.rank - a.rank)
-    .slice(0, MAX_SUGGESTIONS);
+    .filter((suggestion): suggestion is Suggestion => suggestion !== null);
 
-  await logShown(quotationId, suggestions);
+  if (eligible.length === 0) {
+    return empty(await bandit.policyState());
+  }
+
+  const averageLineValue = cartLineCount === 0 ? 1 : cartValue / cartLineCount;
+
+  const scored = await bandit.scoreActions(
+    context,
+    eligible.map((suggestion) => ({
+      productId: suggestion.productId,
+      categoryName: suggestion.categoryName,
+      suggestionType: suggestion.suggestionType,
+      relationshipScore: suggestion.score,
+      promoted: suggestion.promotion !== null,
+      marginPercent: suggestion.marginPercent,
+      priceRatio: averageLineValue > 0 ? suggestion.revenueDelta / averageLineValue : 1,
+      orderMarginDeltaPercent: suggestion.orderMarginDeltaPercent,
+      riskScoreDelta: suggestion.riskScoreDelta,
+    })),
+  );
+
+  const policy = await bandit.policyState();
+
+  // Until the policy has seen enough feedback to be worth trusting, the panel
+  // is still mostly the catalogue's own pairing scores. `trust` walks it over.
+  const ranked = eligible.map((suggestion, index) => {
+    const { score, features } = scored[index]!;
+    const blended = (1 - policy.trust) * clamp01(suggestion.rank) + policy.trust * score;
+
+    suggestion.policyScore = round2(score);
+
+    return { item: suggestion, score: blended, features };
+  });
+
+  const chosen = bandit.exploreTopK(
+    ranked,
+    MAX_SUGGESTIONS,
+    policy.epsilon,
+    `${quotationId}:${policy.updates}`,
+  );
+
+  const suggestions = chosen.map(({ item, probability, explored }) => {
+    item.probability = probability;
+    item.explored = explored;
+
+    return item;
+  });
+
+  const featuresByProduct = new Map(
+    ranked.map((entry) => [entry.item.productId, entry.features]),
+  );
+
+  await logShown(quotationId, suggestions, featuresByProduct, policy.updates);
 
   return {
     suggestions,
     baseline: { riskScore: baseline.score, marginPercent: baseline.marginPercent },
+    policy,
   };
 }
 
@@ -226,6 +312,19 @@ export async function acceptSuggestion(
     reason: "Accepted from the upsell panel",
   });
 
+  // Reward the line as it was actually added, not as it was previewed — a rep
+  // who discounted it to win the deal earned the policy less than a rep who
+  // did not.
+  const added = result.quotation.lines.find((line) => line.productId === productId);
+
+  await learn(
+    quotationId,
+    productId,
+    bandit.acceptCost(added?.marginPercent === null || added?.marginPercent === undefined
+      ? null
+      : Number(added.marginPercent)),
+  );
+
   return result;
 }
 
@@ -240,10 +339,88 @@ export async function dismissSuggestion(
     reason: "Dismissed from the upsell panel",
   });
 
+  await learn(quotationId, productId, bandit.DISMISS);
+
   return getSuggestions(user, quotationId);
 }
 
+/* ── learning ─────────────────────────────────────── */
+
+/** How long a suggestion sits unanswered before it counts as ignored. */
+const SETTLE_AFTER_MINUTES = 30;
+
+/**
+ * Trains the policy on the decision record for this product, if one is still
+ * open. The record carries the features and the probability from the moment it
+ * was shown, so the update is against the panel the rep actually saw.
+ */
+async function learn(quotationId: string, productId: string, cost: number) {
+  const decision = await prisma.recommendationEvent.findFirst({
+    where: {
+      quotationId,
+      productId,
+      action: RECOMMENDATION_ACTION.SHOWN,
+      learnedAt: null,
+      features: { not: Prisma.DbNull },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+
+  if (decision) {
+    await bandit.learnFromEvent(decision.id, cost);
+  }
+}
+
+/** How many stale decisions one panel load settles. */
+const SETTLE_BATCH = 25;
+
+/**
+ * Anything shown long enough ago and never acted on is settled as ignored.
+ * Without this the policy would only ever see accepts and dismissals, and would
+ * read a panel everyone scrolled past as a panel nobody minded.
+ *
+ * The sweep is deliberately global rather than scoped to the quotation being
+ * opened. Scoped, a quotation nobody ever reopens would never settle, so the
+ * only panels teaching the policy would be the ones that drew a rep back — and
+ * being ignored would quietly drop out of the training set it is most needed
+ * in. There is no scheduler in this service to hang the work off, so panel
+ * loads pay for it in bounded batches, oldest decisions first.
+ */
+async function settleOpenDecisions() {
+  const cutoff = new Date(Date.now() - SETTLE_AFTER_MINUTES * 60_000);
+
+  const stale = await prisma.recommendationEvent.findMany({
+    where: {
+      action: RECOMMENDATION_ACTION.SHOWN,
+      learnedAt: null,
+      createdAt: { lt: cutoff },
+      features: { not: Prisma.DbNull },
+    },
+    orderBy: { createdAt: "asc" },
+    take: SETTLE_BATCH,
+    select: { id: true },
+  });
+
+  await bandit.learnFromEvents(
+    stale.map((row) => row.id),
+    bandit.IGNORED,
+  );
+}
+
 /* ── helpers ──────────────────────────────────────── */
+
+function empty(policy: bandit.PolicyState): SuggestionsResult {
+  return {
+    suggestions: [],
+    baseline: { riskScore: 0, marginPercent: null },
+    policy,
+  };
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
 
 function rankOf(score: unknown, promoted: boolean): number {
   return round2((score === null ? 0 : Number(score)) + (promoted ? PROMOTION_RANK_BOOST : 0));
@@ -291,24 +468,40 @@ async function dismissedProductIds(quotationId: string): Promise<Set<string>> {
 }
 
 /**
- * Records that a suggestion was put in front of the rep, once per quotation and
- * product, so the accept rate in the analytics module is meaningful.
+ * Writes the decision record the policy will later learn from: which suggestion
+ * was shown, on what features, with what probability.
+ *
+ * One open record per quotation and product — a panel that refreshes while the
+ * rep works is the same decision, not a new one. Once that record has been
+ * answered (taken, dismissed, or settled as ignored) the next show opens a
+ * fresh one, because being shown again after being passed over really is a new
+ * decision with a new outcome.
  */
-async function logShown(quotationId: string, suggestions: Suggestion[]) {
+async function logShown(
+  quotationId: string,
+  suggestions: Suggestion[],
+  features: Map<string, bandit.FeatureVector>,
+  modelUpdates: number,
+) {
   if (suggestions.length === 0) {
     return;
   }
 
-  const alreadyLogged = await prisma.recommendationEvent.findMany({
+  const open = await prisma.recommendationEvent.findMany({
     where: {
       quotationId,
       productId: { in: suggestions.map((suggestion) => suggestion.productId) },
+      action: RECOMMENDATION_ACTION.SHOWN,
+      learnedAt: null,
+      features: { not: Prisma.DbNull },
     },
     select: { productId: true },
   });
 
-  const seen = new Set(alreadyLogged.map((row) => row.productId));
-  const fresh = suggestions.filter((suggestion) => !seen.has(suggestion.productId));
+  const seen = new Set(open.map((row) => row.productId));
+  const fresh = suggestions.filter(
+    (suggestion) => !seen.has(suggestion.productId) && features.has(suggestion.productId),
+  );
 
   if (fresh.length === 0) {
     return;
@@ -323,6 +516,10 @@ async function logShown(quotationId: string, suggestions: Suggestion[]) {
       marginDelta: suggestion.marginDelta,
       wasPromoted: suggestion.promotion !== null,
       action: RECOMMENDATION_ACTION.SHOWN,
+      probability: suggestion.probability,
+      features: features.get(suggestion.productId)!,
+      modelUpdates,
+      wasExplored: suggestion.explored,
     })),
   });
 }

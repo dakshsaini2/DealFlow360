@@ -246,11 +246,27 @@ export type Suggestion = {
   riskScoreDelta: number;
   promotion: { id: string; name: string; discountValue: number } | null;
   minimumMarginPercent: number | null;
+  /** What the learned policy alone thinks of this candidate, 0-1. */
+  policyScore: number;
+  /** Probability the policy put it on the panel. */
+  probability: number;
+  /** Here because the policy explored, not because it ranked. */
+  explored: boolean;
+};
+
+/** The online policy behind the panel — see the server's bandit service. */
+export type PolicyState = {
+  updates: number;
+  epsilon: number;
+  /** 0 = ranked by catalogue pairings, 1 = ranked by what the panel learned. */
+  trust: number;
+  averageCost: number;
 };
 
 export type SuggestionsResponse = {
   suggestions: Suggestion[];
   baseline: { riskScore: number; marginPercent: number | null };
+  policy: PolicyState;
 };
 
 export async function fetchSuggestions(id: string, signal?: AbortSignal) {
