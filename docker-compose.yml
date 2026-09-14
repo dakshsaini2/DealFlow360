@@ -1,3 +1,13 @@
+# DealFlow360 — the whole stack.
+#
+#   docker compose up -d --build     bring everything up
+#   docker compose logs -f           follow it
+#   docker compose down              stop (add -v to wipe the database)
+#
+# The app lands on http://localhost:8080. Nginx serves the built client and
+# proxies /api to the server, so the browser only ever talks to one origin —
+# the same arrangement vite.config.ts sets up for development.
+
 services:
   postgres:
     image: postgres:17
@@ -5,15 +15,85 @@ services:
     restart: unless-stopped
 
     environment:
-      POSTGRES_USER: odoo
-      POSTGRES_PASSWORD: odoo_password
-      POSTGRES_DB: odoo_db
+      POSTGRES_USER: ${POSTGRES_USER:-odoo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-odoo_password}
+      POSTGRES_DB: ${POSTGRES_DB:-odoo_db}
 
+    # Exposed so psql and Prisma Studio can reach it from the host. Drop this
+    # block to keep the database on the internal network only.
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+    # The server waits on this before it runs migrations. Without it Compose
+    # would start the API against a Postgres that is still initialising.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-odoo} -d ${POSTGRES_DB:-odoo_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  server:
+    build:
+      context: ./server
+    container_name: odoo-server
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      # `postgres` is the service name above — inside the compose network that
+      # is the hostname, not localhost.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-odoo}:${POSTGRES_PASSWORD:-odoo_password}@postgres:5432/${POSTGRES_DB:-odoo_db}
+      NODE_ENV: production
+      PORT: "3000"
+
+      # Override in a .env file beside this one before exposing the stack.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-change-me}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+
+      # Demo data is upserted on every boot; set false once you have real data.
+      SEED_ON_START: ${SEED_ON_START:-true}
+
+      # Links in outgoing mail point at the browser-facing address.
+      APP_URL: ${APP_URL:-http://localhost:8080}
+
+      # Leave SMTP_HOST empty to use the development outbox instead of sending.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-DealFlow360 <no-reply@dealflow360.com>}
+
+    # Only the client needs to reach the API, and it does so over the compose
+    # network. Uncomment to hit the API directly from the host.
+    # ports:
+    #   - "3000:3000"
+
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  client:
+    build:
+      context: ./client
+    container_name: odoo-client
+    restart: unless-stopped
+
+    depends_on:
+      - server
+
+    ports:
+      - "${WEB_PORT:-8080}:80"
 
 volumes:
   postgres_data:
